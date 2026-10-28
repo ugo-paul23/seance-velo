@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Colle ta séance de home trainer : l'écran lit les blocs et avance tout seul (watts, cadence, chrono, bloc suivant).">
+<meta property="og:title" content="Écran de séance vélo">
+<meta property="og:description" content="Colle ta séance de home trainer, pédale : l'écran avance tout seul.">
+<meta name="theme-color" content="#0e1113">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Séance vélo">
+<style>body{margin:0}#setup{padding-top:calc(env(safe-area-inset-top,0px) + 28px)!important}</style>
+<title>Écran de séance vélo</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Archivo:wght@400;600;700&display=swap">
+<style>
+/* Layout : réglage en une colonne, puis cockpit plein écran (gros chiffres en haut, commandes au pouce en bas). Thème sombre volontaire : écran de home trainer. */
+:root {
+  color-scheme: dark;
+  --bg: #0e1113;
+  --panel: #171c20;
+  --line: #2a3238;
+  --fg: #eef2f4;
+  --muted: #8d9aa2;
+  --btn: #e9eef1;
+  --btn-fg: #0e1113;
+  --z1: #4a90ff;
+  --z2: #2fc272;
+  --z3: #ff9f1a;
+  --z4: #ff4b3e;
+  --sprint: #4d0f0b;
+  --warn: #ffcf5c;
+  --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --body: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+button, input, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--warn); outline-offset: 2px; }
+
+/* ---------- Réglage ---------- */
+#setup { max-width: 720px; margin: 0 auto; padding-block: 28px 48px; display: flex; flex-direction: column; gap: 22px; }
+.brand { display: flex; flex-direction: column; gap: 6px; }
+.brand h1 { font-family: var(--display); font-weight: 800; font-size: 44px; line-height: 1; letter-spacing: .01em; margin: 0; text-transform: uppercase; text-wrap: balance; }
+.brand p { margin: 0; color: var(--muted); }
+.field { display: flex; flex-direction: column; gap: 8px; }
+.field label, .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+textarea#seance {
+  width: 100%; box-sizing: border-box; min-height: 150px; resize: vertical;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 14px; line-height: 1.55;
+}
+.hint { font-size: 13px; color: var(--muted); margin: 0; }
+.ftp-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+input#ftp { width: 110px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-variant-numeric: tabular-nums; }
+#warnings { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+#warnings li { border-left: 3px solid var(--warn); padding: 6px 10px; background: var(--panel); font-size: 14px; border-radius: 0 8px 8px 0; }
+.summary-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.summary-head strong { font-family: var(--display); font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
+#profPreview { width: 100%; height: 90px; display: block; background: var(--panel); border-radius: 10px; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; max-height: 320px; overflow-y: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--panel); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+td.w { font-weight: 700; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; }
+.actions { display: flex; flex-direction: column; gap: 10px; }
+.btn-main {
+  background: var(--btn); color: var(--btn-fg); border: 0; border-radius: 14px; padding: 18px; font-weight: 700; font-size: 18px; cursor: pointer;
+}
+.btn-main:disabled { opacity: .35; cursor: not-allowed; }
+.btn-ghost { background: transparent; border: 1px solid var(--line); border-radius: 14px; padding: 14px; cursor: pointer; font-weight: 600; }
+details { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+summary { cursor: pointer; font-weight: 600; }
+details p { color: var(--muted); font-size: 14px; }
+pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px; padding: 12px; font-size: 13px; margin: 0 0 10px; }
+
+/* ---------- Cockpit ---------- */
+#ride {
+  position: fixed; inset: 0; z-index: 5; background: var(--bg);
+  display: flex; flex-direction: column; gap: 1.2vh;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 12px) max(16px, env(safe-area-inset-left, 0px));
+  transition: background-color .4s;
+}
+#ride.sprint { background: var(--sprint); }
+#ride.flash::after { content: ""; position: absolute; inset: 0; background: var(--fg); opacity: .0; animation: flash .7s ease-out; pointer-events: none; }
+@keyframes flash { 0% { opacity: .85; } 100% { opacity: 0; } }
+.r-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.r-top .name { font-weight: 700; font-size: 18px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.r-top .count { color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 8px; font-weight: 600; }
+#back { background: transparent; border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; cursor: pointer; flex-shrink: 0; }
+#wake { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+#wake i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+#wake.ok i { background: var(--z2); }
+#wake.mid i { background: var(--warn); }
+#wake.bad { color: var(--warn); }
+#wake.bad i { background: var(--z4); }
+.watts { display: flex; align-items: baseline; justify-content: center; gap: 10px; line-height: .85; }
+#watts { font-family: var(--display); font-weight: 800; font-size: min(36vw, 24vh); font-variant-numeric: tabular-nums; transition: color .3s; }
+.watts .u { display: flex; flex-direction: column; font-weight: 700; color: var(--muted); font-size: min(5vw, 3vh); line-height: 1.1; }
+.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.duo > div { background: var(--panel); border-radius: 14px; padding: 1vh 12px; display: flex; flex-direction: column; align-items: center; }
+.big { font-family: var(--display); font-weight: 800; font-size: min(16vw, 10vh); line-height: 1; font-variant-numeric: tabular-nums; }
+.lbl { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.bar { height: 10px; background: var(--panel); border-radius: 6px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--fg); border-radius: 6px; }
+#hydr { background: var(--z1); color: #fff; font-weight: 700; text-align: center; border-radius: 12px; padding: 10px; font-size: 20px; }
+.next { display: flex; gap: 10px; align-items: center; background: var(--panel); border-radius: 14px; padding: 10px 14px; font-variant-numeric: tabular-nums; }
+.next b { font-size: 20px; }
+.next .lbl { margin-right: 4px; }
+.global { display: flex; flex-direction: column; gap: 6px; flex: 1 1 auto; min-height: 60px; }
+.global .times { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 600; }
+.global .times b { color: var(--fg); }
+.prof-box { position: relative; flex: 1 1 auto; min-height: 50px; }
+#prof { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border-radius: 10px; background: var(--panel); }
+.controls { display: grid; grid-template-columns: 1fr 1.6fr 1fr; gap: 10px; }
+.controls button { border: 0; border-radius: 16px; min-height: 64px; font-weight: 700; font-size: 18px; cursor: pointer; background: var(--panel); }
+#play { background: var(--btn); color: var(--btn-fg); font-size: 22px; }
+.opts { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+.opts label { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.opts input { width: 22px; height: 22px; }
+#reset { background: transparent; border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; cursor: pointer; }
+#reset.armed { border-color: var(--z4); color: var(--z4); }
+#done { position: absolute; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; padding: 24px; }
+#done h2 { font-family: var(--display); font-size: 56px; margin: 0; text-transform: uppercase; line-height: 1; }
+@media (orientation: landscape) and (max-height: 560px) {
+  #ride { display: grid; grid-template-columns: 1.1fr 1fr; grid-template-rows: auto 1fr auto auto; column-gap: 16px; }
+  .r-top, #wake { grid-column: 1 / -1; }
+  #watts { font-size: min(24vw, 40vh); }
+  .big { font-size: min(9vw, 17vh); }
+}
+@media (prefers-reduced-motion: reduce) { #ride.flash::after { animation: none; } #ride { transition: none; } }
+</style>
+</head>
+<body>
+
+<main id="setup">
+  <div class="brand">
+    <h1>Écran de séance</h1>
+    <p>Colle ta séance de home trainer, vérifie les blocs, et pédale : l'écran avance tout seul.</p>
+  </div>
+
+  <div class="field">
+    <label for="seance">Ta séance</label>
+    <textarea id="seance" spellcheck="false" autocomplete="off"></textarea>
+    <p class="hint" id="exampleHint">Exemple chargé. Remplace-le par ta séance (format « 3min @ 100rpm, 264W »).</p>
+  </div>
+
+  <div class="field">
+    <label for="ftp">FTP (facultatif)</label>
+    <div class="ftp-row">
+      <input id="ftp" type="number" inputmode="numeric" min="50" max="600" placeholder="ex. 300"> <span>W</span>
+      <span class="hint">Sert aux couleurs d'intensité. Sans FTP, le bloc dur le plus long sert de repère.</span>
+    </div>
+  </div>
+
+  <ul id="warnings"></ul>
+
+  <section class="field" id="summary">
+    <div class="summary-head">
+      <span class="eyebrow">Ta séance lue</span>
+      <strong id="sumTotal">0:00</strong>
+    </div>
+    <canvas id="profPreview" aria-label="Profil de la séance"></canvas>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Bloc</th><th>Durée</th><th>Puissance</th><th>Cadence</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="actions">
+    <button class="btn-main" id="go" type="button">Ouvrir l'écran de séance</button>
+    <button class="btn-ghost" id="resume" type="button" hidden></button>
+  </div>
+
+  <details>
+    <summary>Ta séance est écrite autrement ?</summary>
+    <p>Copie ce texte dans n'importe quelle IA (ChatGPT, Claude, Gemini…), colle ta séance à la fin, puis colle sa réponse ici.</p>
+    <pre id="prompt">Réécris ma séance de vélo ci-dessous dans ce format exact, une ligne par bloc, sans aucun autre texte :
+- un bloc : « 5min @ 85rpm, 215W »
+- une rampe : « 10min from 118 to 215W »
+- une répétition : « 4x 3min @ 100rpm, 264W, 2min @ 85rpm, 156W »
+Durées en min et sec (« 1min 30sec »). Puissance en W, ou en % de FTP (« 90% »). Cadence en rpm seulement si elle est donnée.
+Tu peux commencer une ligne par un nom suivi de deux-points (« Échauffement: 10min from 118 to 215W »).
+À la fin, ajoute « FTP: 300W » si la séance donne une FTP, et « Total: 77min » si elle donne une durée totale.
+
+Ma séance :
+[colle ta séance ici]</pre>
+    <button class="btn-ghost" id="copy" type="button">Copier le texte</button>
+  </details>
+</main>
+
+<section id="ride" hidden aria-live="off">
+  <div class="r-top">
+    <div class="name"><span id="bname">—</span><span class="count" id="bcount"></span></div>
+    <button id="back" type="button">Séance</button>
+  </div>
+  <div id="wake"><i></i><span id="wakeTxt">Écran : maintien activé au démarrage</span></div>
+
+  <div class="watts"><span id="watts">0</span><span class="u"><span>W</span><span id="pct"></span></span></div>
+
+  <div class="duo">
+    <div><span class="big" id="rpm">—</span><span class="lbl">rpm</span></div>
+    <div><span class="big" id="cd">0:00</span><span class="lbl">reste</span></div>
+  </div>
+  <div class="bar"><i id="bbar"></i></div>
+
+  <div id="hydr" hidden>Bois une gorgée</div>
+
+  <div class="next"><span class="lbl">Ensuite</span><span id="nextTxt">—</span></div>
+
+  <div class="global">
+    <div class="times"><span><b id="elapsed">0:00</b> / <span id="total">0:00</span></span><span id="remainAll"></span></div>
+    <div class="prof-box"><canvas id="prof" aria-label="Profil et position dans la séance"></canvas></div>
+  </div>
+
+  <div class="controls">
+    <button id="prev" type="button" aria-label="Bloc précédent">◀ Bloc</button>
+    <button id="play" type="button">Démarrer</button>
+    <button id="nextb" type="button" aria-label="Bloc suivant">Bloc ▶</button>
+  </div>
+  <div class="opts">
+    <label><input type="checkbox" id="mute"> Couper le son</label>
+    <label id="hydrOpt"><input type="checkbox" id="hydrOn" checked> Rappel boire</label>
+    <button id="reset" type="button">Remettre à zéro</button>
+  </div>
+
+  <div id="done" hidden>
+    <span class="lbl">Séance terminée</span>
+    <h2 id="doneTime">0:00</h2>
+    <button class="btn-main" id="doneBack" type="button">Revenir à la séance</button>
+  </div>
+</section>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const EXAMPLE = "Warm up: 10min from 118 to 215W\n5x 3min @ 100rpm, 264W, 2min @ 85rpm, 156W\nCool down: 5min @ 85rpm, 140W\nTotal: 40min";
+  const KEY = "velo-timer-v1";
+  const ZONES = ["var(--z1)", "var(--z2)", "var(--z3)", "var(--z4)"];
+  const ZONE_HEX = ["#4a90ff", "#2fc272", "#ff9f1a", "#ff4b3e"];
+  const ZONE_NAMES = ["Facile", "Modéré", "Dur", "Très dur"];
+
+  // ---------- Lecture de la séance ----------
+  const DUR_RE = /(\d+(?:[.,]\d+)?)\s*(heures?|hours?|hrs?|h|minutes?|mins?|mn|min|m|secondes?|seconds?|secs?|sec|s|'|")(?![a-zà-ÿ%])/gi;
+  const unitSec = u => {
+    u = u.toLowerCase();
+    if (u[0] === "h") return 3600;
+    if (u === "'" || u[0] === "m") return 60;
+    return 1;
+  };
+
+  function normalize(line) {
+    return line
+      .replace(/[×✕]/g, "x")
+      .replace(/[–—]/g, "-")
+      .replace(/[()\[\]]/g, " ")
+      .replace(/(\d+)'(\d{1,2})(?!\d)"?/g, "$1min $2sec")
+      .replace(/(\d+)\s*h\s*(\d{2})(?!\d)/gi, "$1h $2min")
+      .replace(/\b(\d{1,2}):(\d{2})\b(?!\s*(?:w|%|rpm))/gi, "$1min $2sec");
+  }
+
+  // Groupes de durées consécutives (« 1min 50sec » = un seul groupe) : chacun ouvre un segment.
+  function durationGroups(t) {
+    const groups = [];
+    let m;
+    DUR_RE.lastIndex = 0;
+    while ((m = DUR_RE.exec(t))) {
+      const sec = parseFloat(m[1].replace(",", ".")) * unitSec(m[2]);
+      const prev = groups[groups.length - 1];
+      if (prev && /^\s*(et|and)?\s*$/i.test(t.slice(prev.end, m.index))) {
+        prev.sec += sec; prev.end = m.index + m[0].length;
+      } else {
+        groups.push({ start: m.index, end: m.index + m[0].length, sec });
+      }
+    }
+    return groups;
+  }
+
+  function parsePower(t) {
+    let m;
+    const U = "(w|watts?|%)";
+    if ((m = t.match(new RegExp("(?:from|de)\\s*(\\d+)\\s*" + U + "?\\s*(?:to|à|a|->|→|-)\\s*(\\d+)\\s*" + U, "i"))))
+      return { a: +m[1], b: +m[3], pct: m[4] === "%", ramp: true };
+    if ((m = t.match(new RegExp("(\\d+)\\s*" + U + "?\\s*(?:->|→|>)\\s*(\\d+)\\s*" + U, "i"))))
+      return { a: +m[1], b: +m[3], pct: m[4] === "%", ramp: true };
+    if ((m = t.match(new RegExp("(\\d+)\\s*-\\s*(\\d+)\\s*" + U, "i"))))
+      return { a: (+m[1] + +m[2]) / 2, b: (+m[1] + +m[2]) / 2, pct: m[3] === "%", range: [+m[1], +m[2]] };
+    if ((m = t.match(new RegExp("(\\d+(?:[.,]\\d+)?)\\s*" + U + "(?![a-z])", "i"))))
+      return { a: parseFloat(m[1].replace(",", ".")), b: parseFloat(m[1].replace(",", ".")), pct: m[2] === "%" };
+    return null;
+  }
+
+  function parseRpm(t) {
+    const m = t.match(/(\d+)\s*(?:-\s*(\d+)\s*)?(?:rpm|tr\s*\/?\s*min|t\/min)/i);
+    if (!m) return null;
+    return m[2] ? { lo: +m[1], hi: +m[2] } : { lo: +m[1], hi: +m[1] };
+  }
+
+  function parseSession(text) {
+    const out = { segs: [], warnings: [], notes: [], ftp: null, total: null };
+    text.split(/\r?\n/).forEach((raw, i) => {
+      let line = normalize(raw.trim().replace(/^[-•*]\s*/, ""));
+      if (!line) return;
+      let label = "";
+      const colon = line.indexOf(":");
+      if (colon > 0 && !/\d\s*(min|sec|s|h|')/i.test(line.slice(0, colon))) {
+        label = line.slice(0, colon).trim();
+        line = line.slice(colon + 1).trim();
+      }
+      const low = label.toLowerCase();
+      if (/^ftp/.test(low) || (!label && /^ftp\b/i.test(line))) {
+        const m = line.match(/(\d{2,3})/); if (m) out.ftp = +m[1]; return;
+      }
+      if (/^(total|durée|duree|temps total)/.test(low)) {
+        const g = durationGroups(line); if (g.length) out.total = g.reduce((s, x) => s + x.sec, 0); return;
+      }
+      let reps = 1, m;
+      if ((m = line.match(/^(\d+)\s*(?:x|fois)\s*/i))) { reps = +m[1]; line = line.slice(m[0].length); }
+      else if ((m = line.match(/\s*x\s*(\d+)\s*$/i))) { reps = +m[1]; line = line.slice(0, m.index); }
+      const groups = durationGroups(line);
+      if (!groups.length) { out.notes.push(raw.trim()); return; }
+      const parts = groups.map((g, k) => {
+        const seg = line.slice(g.start, k + 1 < groups.length ? groups[k + 1].start : line.length);
+        return { sec: Math.round(g.sec), power: parsePower(seg.slice(g.end - g.start)), rpm: parseRpm(seg) };
+      });
+      const valid = parts.filter(p => p.power && p.sec > 0);
+      if (!valid.length) { out.notes.push(raw.trim()); return; }
+      if (valid.length < parts.length) out.warnings.push(`Ligne ${i + 1} : une partie sans puissance a été ignorée.`);
+      for (let r = 0; r < reps; r++) {
+        valid.forEach((p, k) => out.segs.push({ ...p, label, rep: reps > 1 ? [r + 1, reps] : null, part: k, parts: valid.length, line: i + 1 }));
+      }
+    });
+    return out;
+  }
+
+  function buildBlocks(parsed, ftpInput) {
+    const ftp = ftpInput || parsed.ftp || null;
+    const warnings = parsed.warnings.slice();
+    const needsFtp = parsed.segs.some(s => s.power.pct);
+    if (needsFtp && !ftp) warnings.push("Ta séance est en % de FTP : indique ta FTP pour calculer les watts.");
+    const blocks = parsed.segs
+      .filter(s => !s.power.pct || ftp)
+      .map(s => {
+        const k = s.power.pct ? ftp / 100 : 1;
+        return {
+          dur: s.sec, a: Math.round(s.power.a * k), b: Math.round(s.power.b * k),
+          range: s.power.range ? s.power.range.map(v => Math.round(v * k)) : null,
+          ramp: !!s.power.ramp, rpm: s.rpm, label: s.label, rep: s.rep, part: s.part, parts: s.parts
+        };
+      });
+    const long = blocks.filter(b => b.dur >= 120).map(b => Math.max(b.a, b.b));
+    const ref = ftp || (long.length ? Math.max(...long) : Math.max(1, ...blocks.map(b => Math.max(b.a, b.b))));
+    const th = ftp ? [0.75, 0.9, 1.05] : [0.65, 0.8, 0.95];
+    const zoneOf = w => { const p = w / ref; return p < th[0] ? 0 : p < th[1] ? 1 : p < th[2] ? 2 : 3; };
+    let t = 0;
+    blocks.forEach(b => {
+      const peak = Math.max(b.a, b.b);
+      b.zone = zoneOf(peak);
+      b.sprint = (ftp && peak / ftp >= 1.2) || (b.zone === 3 && b.dur <= 60);
+      let base = b.label || (b.sprint ? "Sprint" : b.ramp ? "Rampe" : ZONE_NAMES[b.zone]);
+      if (b.rep && b.parts > 1 && !b.label) {
+        base = b.sprint ? "Sprint" : b.zone >= 2 ? "Effort" : "Récup";
+      }
+      b.name = b.rep ? `${base} ${b.rep[0]}/${b.rep[1]}` : base;
+      b.start = t; t += b.dur * 1000; b.end = t;
+    });
+    const total = t;
+    if (parsed.total && Math.abs(parsed.total * 1000 - total) > 30000)
+      warnings.push(`Total annoncé ${fmt(parsed.total * 1000)}, calculé ${fmt(total)} : vérifie les blocs.`);
+    if (!blocks.length && !warnings.length) warnings.push("Aucun bloc trouvé. Une ligne doit contenir une durée et une puissance, par exemple « 3min @ 100rpm, 264W ».");
+    return { blocks, total, warnings, ftp, ref, zoneOf, notes: parsed.notes };
+  }
+
+  // ---------- Formats ----------
+  function fmt(ms) {
+    const s = Math.max(0, Math.round(ms / 1000));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    return h ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${m}:${String(sec).padStart(2, "0")}`;
+  }
+  const fmtCd = ms => fmt(Math.ceil(Math.max(0, ms) / 1000) * 1000);
+  const powTxt = b => b.ramp ? `${b.a} → ${b.b} W` : b.range ? `${b.range[0]}-${b.range[1]} W` : `${b.a} W`;
+  const rpmTxt = b => !b.rpm ? "libre" : b.rpm.lo === b.rpm.hi ? `${b.rpm.lo}` : `${b.rpm.lo}-${b.rpm.hi}`;
+
+  // ---------- Profil ----------
+  function drawProfile(canvas, plan, pos) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    }
+    const c = canvas.getContext("2d");
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, w, h);
+    if (!plan.blocks.length) return;
+    const max = Math.max(...plan.blocks.map(b => Math.max(b.a, b.b))) * 1.08;
+    const X = t => (t / plan.total) * w, Y = v => h - (v / max) * (h - 6);
+    plan.blocks.forEach(b => {
+      c.globalAlpha = pos != null && b.end <= pos ? 0.3 : 1;
+      c.fillStyle = ZONE_HEX[b.zone];
+      c.beginPath();
+      c.moveTo(X(b.start), h); c.lineTo(X(b.start), Y(b.a)); c.lineTo(X(b.end), Y(b.b)); c.lineTo(X(b.end), h);
+      c.closePath(); c.fill();
+    });
+    c.globalAlpha = 1;
+    if (pos != null) {
+      c.fillStyle = "#eef2f4";
+      c.fillRect(Math.min(w - 3, Math.max(0, X(pos) - 1.5)), 0, 3, h);
+    }
+  }
+
+  // ---------- État ----------
+  let plan = { blocks: [], total: 0, warnings: [] };
+  const S = { elapsed: 0, running: false, last: 0, idx: -1, lastRem: null, started: false, silentJump: false };
+  const el = {
+    seance: $("seance"), ftp: $("ftp"), warnings: $("warnings"), rows: $("rows"), sumTotal: $("sumTotal"),
+    go: $("go"), resume: $("resume"), ride: $("ride"), setup: $("setup")
+  };
+
+  function store() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify({
+        text: el.seance.value, ftp: el.ftp.value, elapsed: S.elapsed, running: S.running, at: Date.now(),
+        mute: $("mute").checked, hydr: $("hydrOn").checked
+      }));
+    } catch (e) {}
+  }
+  function load() { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { return null; } }
+
+  function refresh() {
+    plan = buildBlocks(parseSession(el.seance.value), parseInt(el.ftp.value, 10) || null);
+    el.warnings.innerHTML = "";
+    plan.warnings.forEach(w => { const li = document.createElement("li"); li.textContent = w; el.warnings.appendChild(li); });
+    el.rows.innerHTML = "";
+    plan.blocks.forEach((b, i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${i + 1}</td><td><span class="dot" style="background:${ZONES[b.zone]}"></span></td><td>${fmt(b.dur * 1000)}</td><td class="w"></td><td>${rpmTxt(b)}</td>`;
+      tr.children[1].append(b.name);
+      tr.children[3].textContent = powTxt(b);
+      el.rows.appendChild(tr);
+    });
+    el.sumTotal.textContent = `${plan.blocks.length} blocs · ${fmt(plan.total)}`;
+    el.go.disabled = !plan.blocks.length;
+    $("exampleHint").hidden = el.seance.value.trim() !== EXAMPLE;
+    const hydrApplies = plan.total > 45 * 60000 || /hydrat|boi[rs]|drink|water|\beau\b/i.test(el.seance.value);
+    $("hydrOpt").hidden = !hydrApplies;
+    plan.hydr = hydrApplies;
+    drawProfile($("profPreview"), plan, null);
+  }
+
+  // ---------- Son, vibration ----------
+  let ac = null;
+  function ensureAudio() {
+    try {
+      if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === "suspended") ac.resume();
+    } catch (e) { ac = null; }
+  }
+  function beep(freq, dur, vol = 0.3) {
+    if (!ac || $("mute").checked) return;
+    try {
+      const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+      o.type = "square"; o.frequency.value = freq;
+      g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
+    } catch (e) {}
+  }
+  const buzz = p => { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} };
+
+  // ---------- Écran allumé ----------
+  let wl = null, fbVideo = null, fbTimer = null, wakeState = "idle";
+  function renderWake() {
+    const w = $("wake"), t = $("wakeTxt");
+    w.className = wakeState === "lock" ? "ok" : wakeState === "fallback" ? "mid" : wakeState === "off" ? "bad" : "";
+    t.textContent = {
+      idle: "Écran : maintien activé au démarrage",
+      lock: "Écran maintenu allumé : oui",
+      fallback: "Écran : maintien de secours (vérifie au premier test)",
+      off: "Écran non maintenu : règle le verrouillage auto sur Jamais"
+    }[wakeState];
+  }
+  async function keepAwake() {
+    try {
+      if ("wakeLock" in navigator) {
+        if (wl && !wl.released) return;
+        wl = await navigator.wakeLock.request("screen");
+        wakeState = "lock"; renderWake();
+        wl.addEventListener("release", () => { if (wakeState === "lock") { wakeState = "off"; renderWake(); } });
+        return;
+      }
+    } catch (e) {}
+    startFallback();
+  }
+  function startFallback() {
+    try {
+      if (!fbVideo) {
+        const cv = document.createElement("canvas"); cv.width = cv.height = 2;
+        const ctx = cv.getContext("2d");
+        if (!cv.captureStream) throw new Error("no stream");
+        fbVideo = document.createElement("video");
+        fbVideo.muted = true; fbVideo.loop = true; fbVideo.playsInline = true;
+        fbVideo.setAttribute("playsinline", ""); fbVideo.setAttribute("muted", "");
+        fbVideo.srcObject = cv.captureStream(2);
+        fbVideo.style.cssText = "position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:.01;pointer-events:none";
+        document.body.appendChild(fbVideo);
+        let flip = false;
+        fbTimer = setInterval(() => { flip = !flip; ctx.fillStyle = flip ? "#000" : "#010101"; ctx.fillRect(0, 0, 2, 2); }, 500);
+      }
+      fbVideo.play().then(() => { wakeState = "fallback"; renderWake(); }).catch(() => { wakeState = "off"; renderWake(); });
+    } catch (e) { wakeState = "off"; renderWake(); }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && !el.ride.hidden) { keepAwake(); tick(); }
+  });
+
+  // ---------- Cockpit ----------
+  function blockAt(ms) {
+    const bl = plan.blocks;
+    for (let i = 0; i < bl.length; i++) if (ms < bl[i].end) return i;
+    return bl.length;
+  }
+  let lastProfDraw = 0, lastStore = 0, flashTimer = null;
+  function flash() {
+    el.ride.classList.remove("flash"); void el.ride.offsetWidth; el.ride.classList.add("flash");
+    clearTimeout(flashTimer); flashTimer = setTimeout(() => el.ride.classList.remove("flash"), 800);
+  }
+
+  function render(now) {
+    const bl = plan.blocks;
+    const idx = blockAt(S.elapsed);
+    const finished = idx >= bl.length;
+    if (idx !== S.idx) {
+      if (S.idx >= 0 && S.running && !S.silentJump && !finished) {
+        const nb = bl[idx];
+        beep(nb.sprint ? 1320 : 740, 0.6, 0.35); buzz([220, 90, 220]); flash();
+      }
+      if (finished && S.running) { beep(520, 0.9, 0.35); buzz([400]); }
+      S.idx = idx; S.lastRem = null; S.silentJump = false;
+    }
+    if (finished) {
+      S.running = false;
+      $("done").hidden = false; $("doneTime").textContent = fmt(plan.total);
+      $("play").textContent = "Démarrer";
+      drawProfile($("prof"), plan, plan.total);
+      return;
+    }
+    $("done").hidden = true;
+    const b = bl[idx], inMs = S.elapsed - b.start, rem = b.end - S.elapsed;
+    const remS = Math.ceil(rem / 1000);
+    if (S.running && S.lastRem !== null && remS !== S.lastRem && remS >= 1 && remS <= 3) beep(remS === 1 ? 990 : 880, 0.12, 0.28);
+    S.lastRem = remS;
+
+    const w = Math.round(b.a + (b.b - b.a) * Math.min(1, inMs / (b.dur * 1000)));
+    $("watts").textContent = b.range ? `${b.range[0]}-${b.range[1]}` : w;
+    $("watts").style.color = ZONES[plan.zoneOf(w)];
+    $("pct").textContent = plan.ftp ? `${Math.round((w / plan.ftp) * 100)} %` : "";
+    $("rpm").textContent = rpmTxt(b);
+    $("cd").textContent = fmtCd(rem);
+    $("bbar").style.width = `${(inMs / (b.dur * 1000)) * 100}%`;
+    $("bbar").style.background = ZONES[b.zone];
+    $("bname").textContent = b.name;
+    $("bcount").textContent = `bloc ${idx + 1}/${bl.length}`;
+    const nb = bl[idx + 1];
+    $("nextTxt").innerHTML = nb ? "" : "<b>Fin de séance</b>";
+    if (nb) {
+      const strong = document.createElement("b");
+      strong.textContent = `${powTxt(nb)} · ${rpmTxt(nb)}${nb.rpm ? " rpm" : ""} · ${fmt(nb.dur * 1000)}`;
+      strong.style.color = ZONES[nb.zone];
+      $("nextTxt").append(strong);
+    }
+    $("elapsed").textContent = fmt(S.elapsed);
+    $("total").textContent = fmt(plan.total);
+    $("remainAll").textContent = `reste ${fmt(plan.total - S.elapsed)}`;
+    el.ride.classList.toggle("sprint", !!b.sprint);
+    const q = 15 * 60000;
+    $("hydr").hidden = !(plan.hydr && $("hydrOn").checked && S.elapsed >= q && (S.elapsed % q) < 20000);
+    if (now - lastProfDraw > 250) { drawProfile($("prof"), plan, S.elapsed); lastProfDraw = now; }
+    if (now - lastStore > 1000) { store(); lastStore = now; }
+  }
+
+  function tick() {
+    const now = Date.now();
+    if (S.running) { S.elapsed = Math.min(plan.total, S.elapsed + (now - S.last)); S.last = now; }
+    if (!el.ride.hidden) render(now);
+  }
+  (function loop() { tick(); requestAnimationFrame(loop); })();
+  setInterval(tick, 250); // filet si l'affichage ralentit les animations
+
+  function setRunning(on) {
+    if (on) { ensureAudio(); keepAwake(); S.last = Date.now(); S.started = true; }
+    S.running = on;
+    $("play").textContent = on ? "Pause" : (S.elapsed > 0 ? "Reprendre" : "Démarrer");
+    store();
+  }
+  function jumpTo(ms) { S.elapsed = Math.max(0, Math.min(plan.total, ms)); S.last = Date.now(); S.silentJump = true; tick(); store(); }
+
+  function openRide() {
+    el.setup.hidden = true; el.ride.hidden = false;
+    $("play").textContent = S.running ? "Pause" : (S.elapsed > 0 ? "Reprendre" : "Démarrer");
+    S.idx = blockAt(S.elapsed); S.lastRem = null;
+    renderWake(); tick();
+  }
+  function closeRide() {
+    setRunning(false); el.ride.hidden = true; el.setup.hidden = false;
+    refresh(); showResume();
+    window.scrollTo(0, 0);
+  }
+  function showResume() {
+    const can = S.elapsed > 0 && S.elapsed < plan.total;
+    el.resume.hidden = !can;
+    if (can) el.resume.textContent = `Reprendre la séance en cours (${fmt(S.elapsed)} / ${fmt(plan.total)})`;
+  }
+
+  // ---------- Événements ----------
+  let editTimer = null;
+  const onEdit = () => { clearTimeout(editTimer); editTimer = setTimeout(() => { S.elapsed = 0; refresh(); showResume(); store(); }, 250); };
+  el.seance.addEventListener("input", onEdit);
+  el.ftp.addEventListener("input", () => { refresh(); store(); });
+  el.go.addEventListener("click", () => { if (S.elapsed >= plan.total) S.elapsed = 0; openRide(); });
+  el.resume.addEventListener("click", openRide);
+  $("back").addEventListener("click", closeRide);
+  $("doneBack").addEventListener("click", () => { S.elapsed = 0; closeRide(); });
+  $("play").addEventListener("click", () => setRunning(!S.running));
+  $("prev").addEventListener("click", () => {
+    const i = Math.min(blockAt(S.elapsed), plan.blocks.length - 1), b = plan.blocks[i];
+    jumpTo(S.elapsed - b.start > 3000 ? b.start : (plan.blocks[i - 1] || b).start);
+  });
+  $("nextb").addEventListener("click", () => {
+    const i = blockAt(S.elapsed);
+    if (i + 1 < plan.blocks.length) jumpTo(plan.blocks[i + 1].start);
+  });
+  let armTimer = null;
+  $("reset").addEventListener("click", e => {
+    const btn = e.currentTarget;
+    if (!btn.classList.contains("armed")) {
+      btn.classList.add("armed"); btn.textContent = "Touche encore pour confirmer";
+      armTimer = setTimeout(() => { btn.classList.remove("armed"); btn.textContent = "Remettre à zéro"; }, 3000);
+      return;
+    }
+    clearTimeout(armTimer); btn.classList.remove("armed"); btn.textContent = "Remettre à zéro";
+    setRunning(false); jumpTo(0); $("play").textContent = "Démarrer";
+  });
+  $("mute").addEventListener("change", store);
+  $("hydrOn").addEventListener("change", store);
+  $("copy").addEventListener("click", () => {
+    const txt = $("prompt").textContent, btn = $("copy");
+    const ok = () => { btn.textContent = "Copié"; setTimeout(() => (btn.textContent = "Copier le texte"), 2000); };
+    const fallback = () => {
+      const r = document.createRange(); r.selectNodeContents($("prompt"));
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      btn.textContent = "Texte sélectionné : copie-le";
+    };
+    try { navigator.clipboard.writeText(txt).then(ok, fallback); } catch (e) { fallback(); }
+  });
+  window.addEventListener("resize", () => drawProfile($("profPreview"), plan, null));
+
+  // ---------- Démarrage ----------
+  const saved = load();
+  el.seance.value = saved && saved.text ? saved.text : EXAMPLE;
+  if (saved) {
+    el.ftp.value = saved.ftp || "";
+    $("mute").checked = !!saved.mute;
+    $("hydrOn").checked = saved.hydr !== false;
+  }
+  refresh();
+  if (saved && saved.elapsed > 0) {
+    S.elapsed = Math.min(plan.total, saved.elapsed + (saved.running ? Date.now() - saved.at : 0));
+    showResume();
+    if (saved.running && S.elapsed < plan.total) openRide(); // rechargement en pleine séance : on rouvre en pause
+  }
+})();
+</script>
+</body>
+</html>
