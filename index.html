@@ -85,8 +85,8 @@ td.w { font-weight: 700; }
 details { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
 summary { cursor: pointer; font-weight: 600; }
 details p { color: var(--muted); font-size: 14px; }
-textarea#bugMsg { width: 100%; box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; resize: vertical; }
-#bug .field { margin-bottom: 10px; }
+#toast { position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); z-index: 20; max-width: 520px; margin: 0 auto;
+  background: var(--btn); color: var(--btn-fg); border-radius: 14px; padding: 14px 16px; font-weight: 600; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
 pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px; padding: 12px; font-size: 13px; margin: 0 0 10px; }
 
 /* ---------- Cockpit ---------- */
@@ -192,7 +192,7 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
   <div class="brand">
     <div class="brand-top">
       <h1>Écran de séance</h1>
-      <button class="link-btn" id="bugTop" type="button">Signaler un bug</button>
+      <button class="link-btn" id="bugTop" type="button">Un problème ? Écris-moi</button>
     </div>
     <p>Colle ta séance de home trainer, vérifie les blocs, et pédale : l'écran avance tout seul.</p>
   </div>
@@ -248,17 +248,6 @@ Ma séance :
 [colle ta séance ici]</pre>
     <button class="btn-ghost" id="copy" type="button">Copier le texte</button>
   </details>
-
-  <details id="bug">
-    <summary>Ça ne marche pas ? Signale-le</summary>
-    <p>Le signalement contient ta séance telle que tu l'as collée et ce que l'écran en a lu. Rien n'est envoyé tout seul : tu choisis à qui l'envoyer.</p>
-    <div class="field">
-      <label for="bugMsg">Ce qui ne va pas (facultatif)</label>
-      <textarea id="bugMsg" rows="3" placeholder="ex. il manque la moitié des blocs, les watts sont faux…"></textarea>
-    </div>
-    <button class="btn-ghost" id="bugSend" type="button">Préparer le signalement</button>
-    <p class="hint" id="bugStatus" role="status"></p>
-  </details>
 </main>
 
 <section id="ride" hidden aria-live="off">
@@ -305,6 +294,8 @@ Ma séance :
     <button class="btn-main" id="doneBack" type="button">Revenir à la séance</button>
   </div>
 </section>
+
+<div id="toast" role="status" hidden></div>
 
 <script>
 (() => {
@@ -775,22 +766,17 @@ Ma séance :
   }
 
   // ---------- Signaler un problème ----------
-  // Pas de serveur : on prépare un texte, la personne l'envoie par le partage du téléphone ou le colle en message privé.
-  const CONTACT = ""; // ex. "https://ig.me/m/ton_compte" : ouvert après la copie si renseigné
-  let bugFromRide = null; // où en était la séance quand on a touché « Signaler un bug » pendant l'effort
-  function openBug(fromRide) {
-    if (fromRide) {
-      bugFromRide = { elapsed: S.elapsed, idx: Math.min(blockAt(S.elapsed), plan.blocks.length - 1) };
-      closeRide();
-    } else bugFromRide = null;
-    const d = $("bug"); d.open = true;
-    d.scrollIntoView({ block: "start" });
-    setTimeout(() => { try { $("bugMsg").focus({ preventScroll: true }); } catch (e) {} }, 50);
-  }
+  // Pas de serveur ni de formulaire : on copie un rapport (séance collée, lecture, téléphone) et on ouvre
+  // la messagerie Instagram. La personne colle et écrit ce qui ne va pas.
+  const IG_HANDLE = "ugo_paul23";
+  const DM_URL = `https://ig.me/m/${IG_HANDLE}`;
+  let bugFromRide = null; // où en était la séance quand on a touché « Bug ? » pendant l'effort
   function bugReport() {
     const lines = [
-      "SIGNALEMENT ÉCRAN DE SÉANCE",
-      `Problème : ${$("bugMsg").value.trim() || "(non précisé)"}`,
+      "Salut ! Voici ce qui ne marche pas :",
+      "",
+      "",
+      "— Infos pour corriger (laisse-les dans le message) —",
       `Date : ${new Date().toLocaleString("fr-FR")}`,
       `Appareil : ${navigator.userAgent}`,
       `Écran : ${innerWidth}×${innerHeight} · maintien écran : ${wakeState}`,
@@ -798,40 +784,42 @@ Ma séance :
       `FTP saisie : ${el.ftp.value || "aucune"}`,
       "",
       "— Texte collé —",
-      el.seance.value.slice(0, 4000),
+      el.seance.value.slice(0, 3000),
       "",
       `— Lu par l'écran : ${plan.blocks.length} blocs, ${fmt(plan.total)} —`,
-      ...plan.blocks.slice(0, 60).map((b, i) => `${i + 1}. ${b.name} · ${fmt(b.dur * 1000)} · ${powTxt(b)} · ${rpmTxt(b)}`),
-      ...(plan.blocks.length > 60 ? [`… ${plan.blocks.length - 60} blocs de plus`] : []),
+      ...plan.blocks.slice(0, 40).map((b, i) => `${i + 1}. ${b.name} · ${fmt(b.dur * 1000)} · ${powTxt(b)} · ${rpmTxt(b)}`),
+      ...(plan.blocks.length > 40 ? [`… ${plan.blocks.length - 40} blocs de plus`] : []),
       ...(plan.warnings.length ? ["", "— Avertissements —", ...plan.warnings] : [])
     ];
     return lines.join("\n");
   }
-  $("bugSend").addEventListener("click", async () => {
-    const txt = bugReport(), st = $("bugStatus");
-    const copyIt = async () => {
-      try { await navigator.clipboard.writeText(txt); return true; } catch (e) {}
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = txt; ta.setAttribute("readonly", ""); ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
-        document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, txt.length);
-        const ok = document.execCommand("copy"); ta.remove(); return ok;
-      } catch (e) { return false; }
-    };
-    if (navigator.share) {
-      try { await navigator.share({ title: "Signalement écran de séance", text: txt }); st.textContent = "Merci, c'est envoyé."; return; }
-      catch (e) { if (e && e.name === "AbortError") { st.textContent = "Partage annulé."; return; } }
-    }
-    if (await copyIt()) {
-      st.textContent = CONTACT ? "Copié. Colle-le dans le message qui s'ouvre." : "Signalement copié : colle-le en message privé à la personne qui t'a partagé l'app.";
-      if (CONTACT) setTimeout(() => { location.href = CONTACT; }, 600);
-    } else {
-      st.textContent = "Copie impossible ici : fais une capture d'écran de ta séance et du tableau, et envoie-la.";
-    }
-  });
-
-  $("bugTop").addEventListener("click", () => openBug(false));
-  $("bugRide").addEventListener("click", () => openBug(true));
+  let toastTimer = null;
+  function toast(msg, ms) {
+    const t = $("toast"); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+  }
+  async function copyText(txt) {
+    try { await navigator.clipboard.writeText(txt); return true; } catch (e) {}
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = txt; ta.setAttribute("readonly", ""); ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+      document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, txt.length);
+      const ok = document.execCommand("copy"); ta.remove(); return ok;
+    } catch (e) { return false; }
+  }
+  async function reportBug(fromRide) {
+    if (fromRide) {
+      bugFromRide = { elapsed: S.elapsed, idx: Math.min(blockAt(S.elapsed), plan.blocks.length - 1) };
+      setRunning(false); // la séance attend en pause pendant qu'on écrit le message
+    } else bugFromRide = null;
+    const copied = await copyText(bugReport());
+    toast(copied
+      ? `Ta séance est copiée. Dans le message à @${IG_HANDLE}, colle-la et dis-moi ce qui ne va pas.`
+      : `Envoie-moi un message sur Instagram : @${IG_HANDLE}, avec une capture de ta séance.`, 8000);
+    setTimeout(() => { window.SeanceVelo.openDM(DM_URL); }, copied ? 1800 : 3000);
+  }
+  $("bugTop").addEventListener("click", () => reportBug(false));
+  $("bugRide").addEventListener("click", () => reportBug(true));
 
   // ---------- Événements ----------
   let editTimer = null;
@@ -891,7 +879,8 @@ Ma séance :
   window.addEventListener("resize", () => drawProfile($("profPreview"), plan, null));
 
   // Point d'accès pour la routine de test (tests/), sans effet sur l'écran.
-  window.SeanceVelo = { read: (text, ftp) => buildBlocks(parseSession(text), ftp || null), EXAMPLE, bugReport };
+  // openDM est remplaçable par les tests (pour ne pas quitter la page).
+  window.SeanceVelo = { read: (text, ftp) => buildBlocks(parseSession(text), ftp || null), EXAMPLE, bugReport, openDM: url => { location.href = url; } };
 
   // ---------- Démarrage ----------
   const saved = load();

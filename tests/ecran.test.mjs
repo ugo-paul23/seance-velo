@@ -115,24 +115,6 @@ test("le texte du guide IA se copie", async () => {
   } finally { await browser.close(); }
 });
 
-test("signalement de bug : contient la séance collée, la lecture et le message", async () => {
-  const { browser, page } = await openApp();
-  try {
-    await paste(page, "10min @ 200W\n4x 1min @ 400W, 1min @ 100W");
-    await page.click("#bug summary");
-    await page.fill("#bugMsg", "les watts sont faux");
-    const report = await page.evaluate(() => window.SeanceVelo.bugReport());
-    assert.match(report, /les watts sont faux/);
-    assert.match(report, /4x 1min @ 400W, 1min @ 100W/);
-    assert.match(report, /9 blocs, 18:00/);
-    // Sans partage natif (Chromium bureau) : copie + message affiché.
-    await page.evaluate(() => { delete navigator.share; });
-    await page.click("#bugSend");
-    await page.waitForFunction(() => document.getElementById("bugStatus").textContent !== "", null, { timeout: 3000 });
-    assert.match(await page.textContent("#bugStatus"), /copié|Copie impossible/i);
-  } finally { await browser.close(); }
-});
-
 const LONG = "Échauffement: 10min @ 150W\n6x 6min @ 264W, 2min @ 156W"; // > 45 min : affiche aussi « Rappel boire »
 for (const device of ["iPhone SE", "iPhone 13", "Pixel 7", "iPhone SE landscape", "iPhone 13 landscape", "Pixel 7 landscape", "iPad Mini landscape"]) {
   test(`l'écran de séance tient sans débordement ni chevauchement sur ${device}`, async () => {
@@ -373,36 +355,69 @@ test("bouton « ← Retour » visible sur l'écran de séance", async () => {
   } finally { await browser.close(); }
 });
 
-test("« Signaler un bug » en haut du réglage ouvre le formulaire", async () => {
+// ---------- Signaler un problème : copie du rapport + DM Instagram ----------
+// On capture le presse-papiers et l'ouverture de la messagerie au lieu de quitter la page.
+async function spyBug(page) {
+  await page.evaluate(() => {
+    window.__copied = null; window.__dm = null;
+    navigator.clipboard.writeText = async t => { window.__copied = t; };
+    window.SeanceVelo.openDM = url => { window.__dm = url; };
+  });
+}
+
+test("« Un problème ? Écris-moi » : copie la séance et ouvre le DM Instagram, sans formulaire", async () => {
   const { browser, page } = await openApp({ fakeClock: true });
   try {
-    assert.equal(await page.isVisible("#bugTop"), true, "visible sans faire défiler");
+    assert.equal(await page.locator("#bugMsg, #bugSend, details#bug").count(), 0, "plus de formulaire");
     const box = await page.locator("#bugTop").boundingBox();
-    assert.ok(box.y < 200, "en haut de la page");
+    assert.ok(box && box.y < 200, "bouton visible en haut sans faire défiler");
+    await paste(page, "10min @ 200W\n4x 1min @ 400W, 1min @ 100W", { fake: true });
+    await spyBug(page);
     await page.click("#bugTop");
-    await page.clock.runFor(200);
-    assert.equal(await page.isVisible("#bugMsg"), true);
+    await page.clock.runFor(300);
+    assert.match(await page.textContent("#toast"), /copiée.*@ugo_paul23/);
+    const copied = await page.evaluate(() => window.__copied);
+    assert.match(copied, /4x 1min @ 400W, 1min @ 100W/, "séance collée dans le rapport");
+    assert.match(copied, /9 blocs, 18:00/, "lecture de l'écran dans le rapport");
+    assert.doesNotMatch(copied, /Signalé pendant la séance/);
+    await page.clock.runFor(2000);
+    assert.equal(await page.evaluate(() => window.__dm), "https://ig.me/m/ugo_paul23");
   } finally { await browser.close(); }
 });
 
-test("« Signaler un bug » pendant la séance : met en pause et note où on en était", async () => {
+test("« Bug ? » pendant la séance : met en pause, note la position et ouvre le DM", async () => {
   const { browser, page } = await openApp({ fakeClock: true });
   try {
     await paste(page, SHORT, { fake: true });
     await page.click("#go");
     await page.click("#play");
     await page.clock.runFor(12300);
-    assert.equal(await page.isVisible("#bugRide"), true);
+    await spyBug(page);
     await page.click("#bugRide");
-    await page.clock.runFor(200);
-    assert.equal(await page.isVisible("#setup"), true);
-    assert.equal(await page.isVisible("#bugMsg"), true);
-    const report = await page.evaluate(() => window.SeanceVelo.bugReport());
-    assert.match(report, /Signalé pendant la séance : 0:12 \/ 0:30, bloc 2\/5/);
+    await page.clock.runFor(300);
+    assert.match(await page.evaluate(() => window.__copied), /Signalé pendant la séance : 0:12 \/ 0:30, bloc 2\/5/);
+    const before = (await cockpit(page)).elapsed;
     await page.clock.runFor(5000);
-    assert.match(await page.textContent("#resume"), /0:12/, "le chrono doit être en pause");
-    // Un signalement fait ensuite depuis le réglage ne doit plus porter la position.
+    const s = await cockpit(page);
+    assert.equal(s.elapsed, before, "le chrono doit être en pause");
+    assert.equal(s.play, "Reprendre");
+    assert.equal(await page.evaluate(() => window.__dm), "https://ig.me/m/ugo_paul23");
+  } finally { await browser.close(); }
+});
+
+test("copie impossible : donne quand même le compte Instagram et ouvre le DM", async () => {
+  const { browser, page } = await openApp({ fakeClock: true });
+  try {
+    await page.evaluate(() => {
+      window.__dm = null;
+      navigator.clipboard.writeText = async () => { throw new Error("refusé"); };
+      document.execCommand = () => false;
+      window.SeanceVelo.openDM = url => { window.__dm = url; };
+    });
     await page.click("#bugTop");
-    assert.doesNotMatch(await page.evaluate(() => window.SeanceVelo.bugReport()), /Signalé pendant la séance/);
+    await page.clock.runFor(300);
+    assert.match(await page.textContent("#toast"), /@ugo_paul23.*capture/);
+    await page.clock.runFor(3200);
+    assert.equal(await page.evaluate(() => window.__dm), "https://ig.me/m/ugo_paul23");
   } finally { await browser.close(); }
 });
