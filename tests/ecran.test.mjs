@@ -33,7 +33,8 @@ test("le chrono avance, change de bloc, se met en pause et s'arrête à la fin",
     assert.deepEqual([s.name, s.count, s.watts, s.left, s.play], ["Échauffement", "bloc 1/5", "150", "0:10", "Démarrer"]);
 
     await page.click("#play");
-    await page.clock.runFor(4000);
+    // 4,3 s et pas 4 s pile : à 4 s, le compte à rebours est pile sur la limite 0:06/0:07 et dépend de la vitesse de la machine.
+    await page.clock.runFor(4300);
     s = await cockpit(page);
     assert.deepEqual([s.left, s.elapsed, s.play], ["0:06", "0:04", "Pause"]);
 
