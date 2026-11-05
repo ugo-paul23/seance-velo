@@ -44,6 +44,23 @@ const CASES = [
   { name: "% suivi de FTP", text: "10min @ 55-75% FTP\n20min à 90 % de FTP", ftp: 300, blocks: 2, total: 1800, first: [[600, 195, 195, null], [1200, 270, 270, null]] },
   { name: "FTP à 4 chiffres lue en entier", text: "FTP: 1000W\n10min @ 50%", blocks: 1, total: 600, first: [[600, 500, 500, null]] },
   { name: "répétition imbriquée : avertit", text: "2x (3x 1min @ 400W, 1min @ 150W), 5min @ 120W", warn: /répétition dans une répétition/, blocks: 6, total: 840 },
+  { name: "texte vide", text: "  \n\n ", blocks: 0, total: 0, warn: /Aucun bloc/ },
+  { name: "emojis en début de ligne", text: "🔥 Échauffement 🔥: 10min @ 150W\n💪 5x 1min @ 400W, 1min @ 100W", blocks: 11, total: 1200, names: ["Échauffement"], noWarn: true },
+  { name: "nom seul sur sa ligne puis les blocs", text: "Échauffement :\n10min @ 150W\nBloc principal :\n3x 5min @ 280W, 3min @ 150W", blocks: 7, total: 2040 },
+  { name: "rampe descendante", text: "10min from 200 to 100W", blocks: 1, total: 600, first: [[600, 200, 100, null]] },
+  { name: "plage « 250 à 270W » et « entre 250 et 270 W »", text: "20min @ 250 à 270W\n20min entre 250 et 270 W", blocks: 2, total: 2400, first: [[1200, 260, 260, null], [1200, 260, 260, null]] },
+  { name: "« progressif 100 à 200 W » reste une rampe", text: "15 min progressif 100 à 200 W", blocks: 1, total: 900, first: [[900, 100, 200, null]] },
+  { name: "cadence avant la puissance", text: "5min @ 90rpm 250W", blocks: 1, total: 300, first: [[300, 250, 250, 90]] },
+  { name: "lignes km / kcal ignorées sans casser", text: "Distance: 20km\nCalories: 500kcal\n10min @ 200W", blocks: 1, total: 600 },
+  { name: "W et % mélangés", text: "10min @ 150W\n5min @ 100%", ftp: 250, blocks: 2, total: 900, first: [[600, 150, 150, null], [300, 250, 250, null]] },
+  { name: "le champ FTP l'emporte sur la ligne FTP", text: "FTP: 200W\n10min @ 100%", ftp: 300, blocks: 1, total: 600, first: [[600, 300, 300, null]] },
+  { name: "FTP négative refusée", text: "10min @ 50%", ftp: -200, blocks: 0, total: 0, warn: /entre 50 et 2000/ },
+  { name: "total annoncé différent : avertit", text: "3x 5min @ 300W\nTotal: 60min", blocks: 3, total: 900, warn: /Total annoncé/ },
+  { name: "séparateurs ; / + et « R »", text: "4x 3min @ 264W; 2min @ 156W\n4x 3min @ 264W / 2min @ 156W\n4x 3min @ 264W + 2min @ 156W\n4x 3min @ 264W R 2min @ 156W", blocks: 32, total: 4800 },
+  { name: "« (4 fois) » et « x 4 » en fin de ligne", text: "3min @ 264W, 2min @ 156W (4 fois)\n3min @ 264W, 2min @ 156W x 4", blocks: 16, total: 2400 },
+  { name: "« 3 tours : »", text: "3 tours : 4min @ 280W, 2min @ 140W", blocks: 6, total: 1080, names: ["Effort 1/3", "Récup 1/3"] },
+  { name: "100 répétitions", text: "100x 10sec @ 500W, 20sec @ 100W", blocks: 200, total: 3000 },
+  { name: "secondes seules, tabulations, w minuscule", text: "45s @ 400W\n\t15s\t@\t100w", blocks: 2, total: 60 },
   { name: "effort sous la FTP reste nommé Effort", text: "4x 3min @ 264W, 2min @ 156W\nFTP: 300W", blocks: 8, total: 1200, names: ["Effort 1/4", "Récup 1/4"] }
 ];
 

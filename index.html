@@ -281,7 +281,7 @@ Ma séance :
   // Ce que les IA ajoutent souvent autour des lignes : puces, numéros, guillemets, gras markdown, titres.
   const LIST_MARK = /^(?:[-•*·–—>]+|\d{1,2}[.)](?!\d)|#+)\s*/;
   function clean(line) {
-    line = line.replace(/[​-‍⁠﻿]/g, "").replace(/\*\*|__|`/g, "").replace(/\|/g, " ").trim();
+    line = line.replace(/[​-‍⁠﻿]/g, "").replace(/\*\*|__|`/g, "").replace(/\|/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F]/gu, "").trim();
     let prev;
     do { prev = line; line = line.replace(LIST_MARK, "").replace(/^["«“”»]\s*/, "").replace(/\s*["»”“«]\s*$/, "").trim(); }
     while (line !== prev);
@@ -324,6 +324,11 @@ Ma séance :
       return { a: +m[1], b: +m[3], pct: m[4] === "%", ramp: true };
     if ((m = t.match(new RegExp("(\\d+)\\s*" + U + "?\\s*(?:->|→|>)\\s*(\\d+)\\s*" + U, "i"))))
       return { a: +m[1], b: +m[3], pct: m[4] === "%", ramp: true };
+    if ((m = t.match(new RegExp("(\\d+)\\s*" + U + "?\\s*(?:à|a|et|to)\\s*(\\d+)\\s*" + U, "i")))) {
+      // Sans « de/from » : une plage à tenir (« 250 à 270W »), sauf si la ligne parle de progression.
+      if (/progressi|rampe|ramp|mont[ée]e?|augment/i.test(t)) return { a: +m[1], b: +m[3], pct: m[4] === "%", ramp: true };
+      return { a: (+m[1] + +m[3]) / 2, b: (+m[1] + +m[3]) / 2, pct: m[4] === "%", range: [+m[1], +m[3]] };
+    }
     if ((m = t.match(new RegExp("(\\d+)\\s*-\\s*(\\d+)\\s*" + U, "i"))))
       return { a: (+m[1] + +m[2]) / 2, b: (+m[1] + +m[2]) / 2, pct: m[3] === "%", range: [+m[1], +m[2]] };
     if ((m = t.match(new RegExp("(\\d+(?:[.,]\\d+)?)\\s*" + U + "(?![a-z])", "i"))))
@@ -338,7 +343,7 @@ Ma séance :
   }
 
   // « 4x », « 4 x », « 4 fois », « 4 séries de », « 4 rounds of », « Répéter 4 fois »…
-  const REP_HEAD = /^(?:r[ée]p[ée]t(?:er|e|ition)?s?\s*:?\s*|repeat\s*:?\s*)?(\d+)\s*(?:x|fois|s[ée]ries?|sets?|rounds?|reps?|r[ée]p[ée]titions?|blocs?)(?![a-zà-ÿ])\s*(?:de|of|:)?\s*/i;
+  const REP_HEAD = /^(?:r[ée]p[ée]t(?:er|e|ition)?s?\s*:?\s*|repeat\s*:?\s*)?(\d+)\s*(?:x|fois|s[ée]ries?|sets?|rounds?|tours?|reps?|r[ée]p[ée]titions?|blocs?)(?![a-zà-ÿ])\s*(?:de|of|:)?\s*/i;
   const REP_TAIL = /\s*(?:x\s*(\d+)|(\d+)\s*(?:x|fois))\s*$/i;
   const indentOf = s => (s.match(/^\s*/)[0].replace(/\t/g, "    ")).length;
   const bulleted = s => LIST_MARK.test(s.trim());
@@ -440,8 +445,11 @@ Ma séance :
   }
 
   function buildBlocks(parsed, ftpInput) {
-    const ftp = ftpInput || parsed.ftp || null;
     const warnings = parsed.warnings.slice();
+    const okFtp = v => v >= 50 && v <= 2000;
+    if (ftpInput && !okFtp(ftpInput)) warnings.push(`FTP ${ftpInput} W ignorée : elle doit être entre 50 et 2000 W.`);
+    if (parsed.ftp && !okFtp(parsed.ftp)) warnings.push(`FTP ${parsed.ftp} W de la séance ignorée : elle doit être entre 50 et 2000 W.`);
+    const ftp = (okFtp(ftpInput) && ftpInput) || (okFtp(parsed.ftp) && parsed.ftp) || null;
     const needsFtp = parsed.segs.some(s => s.power.pct);
     if (needsFtp && !ftp) warnings.push("Ta séance est en % de FTP : indique ta FTP pour calculer les watts.");
     const blocks = parsed.segs
