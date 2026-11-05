@@ -85,6 +85,8 @@ td.w { font-weight: 700; }
 details { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
 summary { cursor: pointer; font-weight: 600; }
 details p { color: var(--muted); font-size: 14px; }
+textarea#bugMsg { width: 100%; box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; resize: vertical; }
+#bug .field { margin-bottom: 10px; }
 pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px; padding: 12px; font-size: 13px; margin: 0 0 10px; }
 
 /* ---------- Cockpit ---------- */
@@ -203,6 +205,17 @@ Ma séance :
 [colle ta séance ici]</pre>
     <button class="btn-ghost" id="copy" type="button">Copier le texte</button>
   </details>
+
+  <details id="bug">
+    <summary>Ça ne marche pas ? Signale-le</summary>
+    <p>Le signalement contient ta séance telle que tu l'as collée et ce que l'écran en a lu. Rien n'est envoyé tout seul : tu choisis à qui l'envoyer.</p>
+    <div class="field">
+      <label for="bugMsg">Ce qui ne va pas (facultatif)</label>
+      <textarea id="bugMsg" rows="3" placeholder="ex. il manque la moitié des blocs, les watts sont faux…"></textarea>
+    </div>
+    <button class="btn-ghost" id="bugSend" type="button">Préparer le signalement</button>
+    <p class="hint" id="bugStatus" role="status"></p>
+  </details>
 </main>
 
 <section id="ride" hidden aria-live="off">
@@ -268,7 +281,7 @@ Ma séance :
   // Ce que les IA ajoutent souvent autour des lignes : puces, numéros, guillemets, gras markdown, titres.
   const LIST_MARK = /^(?:[-•*·–—>]+|\d{1,2}[.)](?!\d)|#+)\s*/;
   function clean(line) {
-    line = line.replace(/[​-‍⁠﻿]/g, "").replace(/\*\*|__|`/g, "").trim();
+    line = line.replace(/[​-‍⁠﻿]/g, "").replace(/\*\*|__|`/g, "").replace(/\|/g, " ").trim();
     let prev;
     do { prev = line; line = line.replace(LIST_MARK, "").replace(/^["«“”»]\s*/, "").replace(/\s*["»”“«]\s*$/, "").trim(); }
     while (line !== prev);
@@ -277,6 +290,7 @@ Ma séance :
 
   function normalize(line) {
     return line
+      .replace(/[’‘′´]/g, "'").replace(/''|″/g, '"') // apostrophes automatiques de l'iPhone : 8’ 30’’
       .replace(/[×✕]/g, "x")
       .replace(/[–—]/g, "-")
       .replace(/[()\[\]]/g, " ")
@@ -324,7 +338,7 @@ Ma séance :
   }
 
   // « 4x », « 4 x », « 4 fois », « 4 séries de », « 4 rounds of », « Répéter 4 fois »…
-  const REP_HEAD = /^(?:r[ée]p[ée]t(?:er|e|ition)?s?\s*:?\s*|repeat\s*:?\s*)?(\d+)\s*(?:x|fois|s[ée]ries?|sets?|rounds?|reps?|r[ée]p[ée]titions?|blocs?)\b\s*(?:de|of|:)?\s*/i;
+  const REP_HEAD = /^(?:r[ée]p[ée]t(?:er|e|ition)?s?\s*:?\s*|repeat\s*:?\s*)?(\d+)\s*(?:x|fois|s[ée]ries?|sets?|rounds?|reps?|r[ée]p[ée]titions?|blocs?)(?![a-zà-ÿ])\s*(?:de|of|:)?\s*/i;
   const REP_TAIL = /\s*(?:x\s*(\d+)|(\d+)\s*(?:x|fois))\s*$/i;
   const indentOf = s => (s.match(/^\s*/)[0].replace(/\t/g, "    ")).length;
   const bulleted = s => LIST_MARK.test(s.trim());
@@ -342,8 +356,18 @@ Ma séance :
         g.items.forEach((p, k) => out.segs.push({ ...p, label: p.label || g.label, rep: g.reps > 1 ? [r + 1, g.reps] : null, part: k, parts: g.items.length }));
     };
 
+    // Format « vertical » : un nom de bloc, puis « Durée : 10 min », « Puissance : 150 W » sur des lignes séparées.
+    let vert = null, lastNote = "";
+    const endVert = () => {
+      if (!vert) return;
+      const v = vert; vert = null;
+      if (v.sec > 0 && v.power) out.segs.push({ sec: v.sec, power: v.power, rpm: v.rpm, label: v.label, line: v.line, rep: null, part: 0, parts: 1 });
+      else out.warnings.push(`Ligne ${v.line} : bloc « ${v.label || "sans nom"} » incomplet (il faut une durée et une puissance), ignoré.`);
+    };
+
     lines.forEach((raw, i) => {
       const n = i + 1;
+      if (!raw.trim()) endVert();
       if (group && raw.trim() && !(indentOf(raw) > group.indent || (!group.bullet && bulleted(raw)))) flush();
       if (group && !raw.trim()) { if (group.items.length) flush(); return; }
       let line = normalize(clean(raw));
@@ -355,10 +379,28 @@ Ma séance :
         line = line.slice(colon + 1).trim();
       }
       const low = label.toLowerCase();
-      if (/^ftp/.test(low) || (!label && /^ftp\b/i.test(line))) {
-        const m = line.match(/(\d{2,3})/); if (m) out.ftp = +m[1]; return;
+      if (/^(dur[ée]e|duration|temps)$/.test(low)) {
+        const g = durationGroups(line);
+        if (g.length) {
+          if (vert && vert.sec) endVert();
+          vert = vert || { label: lastNote, line: n, sec: 0, power: null, rpm: null };
+          vert.sec = Math.round(g.reduce((s, x) => s + x.sec, 0));
+          return;
+        }
       }
-      if (/^(total|durée|duree|temps total)/.test(low)) {
+      if (/^(puissance|power|watts|intensit[ée]|cible|target)$/.test(low) && parsePower(line)) {
+        if (vert && vert.power) endVert();
+        vert = vert || { label: lastNote, line: n, sec: 0, power: null, rpm: null };
+        vert.power = parsePower(line); return;
+      }
+      if (/^(cadence|rpm)$/.test(low) && vert) {
+        const r = parseRpm(line) || (line.match(/^(\d{2,3})\b/) ? parseRpm(line.match(/^(\d{2,3})/)[1] + "rpm") : null);
+        vert.rpm = r; return;
+      }
+      if (/^ftp/.test(low) || (!label && /^ftp\b/i.test(line))) {
+        const m = line.match(/(\d{2,4})/); if (m) out.ftp = +m[1]; return;
+      }
+      if (/^(total|dur[ée]e totale|temps total)/.test(low)) {
         const g = durationGroups(line); if (g.length) out.total = g.reduce((s, x) => s + x.sec, 0); return;
       }
       let reps = 1, m;
@@ -367,11 +409,16 @@ Ma séance :
       const groups = durationGroups(line);
       if (!groups.length) {
         if (reps > 1 && !group) { group = { reps, label, line: n, indent: indentOf(raw), bullet: bulleted(raw), items: [] }; return; }
-        out.notes.push(raw.trim()); return;
+        endVert(); out.notes.push(raw.trim()); lastNote = label || line; return;
       }
+      endVert();
+      if (/\d\s*x\s*\d/i.test(line))
+        out.warnings.push(`Ligne ${n} : répétition dans une répétition, pas gérée. Écris les tours à plat (une ligne par répétition).`);
       const parts = groups.map((g, k) => {
         const seg = line.slice(g.start, k + 1 < groups.length ? groups[k + 1].start : line.length);
-        return { sec: Math.round(g.sec), power: parsePower(seg.slice(g.end - g.start)), rpm: parseRpm(seg), label, line: n };
+        let power = parsePower(seg.slice(g.end - g.start));
+        if (!power && k === 0) power = parsePower(line.slice(0, g.start)); // « 200W pendant 10min »
+        return { sec: Math.round(g.sec), power, rpm: parseRpm(seg) || (k === 0 ? parseRpm(line.slice(0, g.start)) : null), label, line: n };
       });
       const valid = parts.filter(p => p.power && p.sec > 0);
       if (!valid.length) {
@@ -387,6 +434,7 @@ Ma séance :
         valid.forEach((p, k) => out.segs.push({ ...p, label, rep: reps > 1 ? [r + 1, reps] : null, part: k, parts: valid.length }));
       }
     });
+    endVert();
     flush();
     return out;
   }
@@ -672,6 +720,51 @@ Ma séance :
     if (can) el.resume.textContent = `Reprendre la séance en cours (${fmt(S.elapsed)} / ${fmt(plan.total)})`;
   }
 
+  // ---------- Signaler un problème ----------
+  // Pas de serveur : on prépare un texte, la personne l'envoie par le partage du téléphone ou le colle en message privé.
+  const CONTACT = ""; // ex. "https://ig.me/m/ton_compte" : ouvert après la copie si renseigné
+  function bugReport() {
+    const lines = [
+      "SIGNALEMENT ÉCRAN DE SÉANCE",
+      `Problème : ${$("bugMsg").value.trim() || "(non précisé)"}`,
+      `Date : ${new Date().toLocaleString("fr-FR")}`,
+      `Appareil : ${navigator.userAgent}`,
+      `Écran : ${innerWidth}×${innerHeight}`,
+      `FTP saisie : ${el.ftp.value || "aucune"}`,
+      "",
+      "— Texte collé —",
+      el.seance.value.slice(0, 4000),
+      "",
+      `— Lu par l'écran : ${plan.blocks.length} blocs, ${fmt(plan.total)} —`,
+      ...plan.blocks.slice(0, 60).map((b, i) => `${i + 1}. ${b.name} · ${fmt(b.dur * 1000)} · ${powTxt(b)} · ${rpmTxt(b)}`),
+      ...(plan.blocks.length > 60 ? [`… ${plan.blocks.length - 60} blocs de plus`] : []),
+      ...(plan.warnings.length ? ["", "— Avertissements —", ...plan.warnings] : [])
+    ];
+    return lines.join("\n");
+  }
+  $("bugSend").addEventListener("click", async () => {
+    const txt = bugReport(), st = $("bugStatus");
+    const copyIt = async () => {
+      try { await navigator.clipboard.writeText(txt); return true; } catch (e) {}
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = txt; ta.setAttribute("readonly", ""); ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+        document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, txt.length);
+        const ok = document.execCommand("copy"); ta.remove(); return ok;
+      } catch (e) { return false; }
+    };
+    if (navigator.share) {
+      try { await navigator.share({ title: "Signalement écran de séance", text: txt }); st.textContent = "Merci, c'est envoyé."; return; }
+      catch (e) { if (e && e.name === "AbortError") { st.textContent = "Partage annulé."; return; } }
+    }
+    if (await copyIt()) {
+      st.textContent = CONTACT ? "Copié. Colle-le dans le message qui s'ouvre." : "Signalement copié : colle-le en message privé à la personne qui t'a partagé l'app.";
+      if (CONTACT) setTimeout(() => { location.href = CONTACT; }, 600);
+    } else {
+      st.textContent = "Copie impossible ici : fais une capture d'écran de ta séance et du tableau, et envoie-la.";
+    }
+  });
+
   // ---------- Événements ----------
   let editTimer = null;
   const stripExample = () => {
@@ -730,7 +823,7 @@ Ma séance :
   window.addEventListener("resize", () => drawProfile($("profPreview"), plan, null));
 
   // Point d'accès pour la routine de test (tests/), sans effet sur l'écran.
-  window.SeanceVelo = { read: (text, ftp) => buildBlocks(parseSession(text), ftp || null), EXAMPLE };
+  window.SeanceVelo = { read: (text, ftp) => buildBlocks(parseSession(text), ftp || null), EXAMPLE, bugReport };
 
   // ---------- Démarrage ----------
   const saved = load();

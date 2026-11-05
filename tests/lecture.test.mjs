@@ -35,6 +35,15 @@ const CASES = [
   { name: "texte libre en français", text: "Échauffement 15 min progressif de 100 à 200 W\n3 x 8 min à 280 W récup 4 min à 150 W\nRetour au calme 10 min 120 W", blocks: 8, total: 3660 },
   { name: "nom de bloc contenant un chiffre", text: "Bloc 1: 5min @ 200W\nZ2: 20min @ 180W", blocks: 2, total: 1500, names: ["Bloc 1", "Z2"] },
   { name: "ligne sans puissance : signalée, pas avalée en silence", text: "10min Z2\n5min @ 200W", blocks: 1, total: 300, warn: /Ligne 1 ignorée/ },
+  { name: "répétition collée « 4x3min »", text: "4x3min @ 264W, 2min @ 156W", blocks: 8, total: 1200 },
+  { name: "apostrophes automatiques de l'iPhone (8’ 30’’)", text: "4×8’ à 105%\n3’30’’ à 50%", ftp: 300, blocks: 5, total: 4 * 480 + 210, first: [[480, 315, 315, null]], noWarn: true },
+  { name: "secondes avec ″", text: "1’30″ @ 300W", blocks: 1, total: 90 },
+  { name: "tableau markdown (Gemini)", text: "| Bloc | Durée | Puissance | Cadence |\n|---|---|---|---|\n| Échauffement | 10min | 118 → 215W | |\n| 4x | 3min | 264W | 100rpm |\n| Retour au calme | 5min | 140W | 85rpm |", blocks: 6, total: 1620 },
+  { name: "format vertical Durée / Puissance", text: "Échauffement\nDurée : 10 min\nPuissance : 150 W\n\nBloc\nDurée : 5 min\nPuissance : 250 W\nCadence : 95", blocks: 2, total: 900, names: ["Échauffement", "Bloc"], first: [[600, 150, 150, null], [300, 250, 250, 95]] },
+  { name: "puissance écrite avant la durée", text: "200W pendant 10min\n250W x 5min", blocks: 2, total: 900 },
+  { name: "% suivi de FTP", text: "10min @ 55-75% FTP\n20min à 90 % de FTP", ftp: 300, blocks: 2, total: 1800, first: [[600, 195, 195, null], [1200, 270, 270, null]] },
+  { name: "FTP à 4 chiffres lue en entier", text: "FTP: 1000W\n10min @ 50%", blocks: 1, total: 600, first: [[600, 500, 500, null]] },
+  { name: "répétition imbriquée : avertit", text: "2x (3x 1min @ 400W, 1min @ 150W), 5min @ 120W", warn: /répétition dans une répétition/, blocks: 6, total: 840 },
   { name: "effort sous la FTP reste nommé Effort", text: "4x 3min @ 264W, 2min @ 156W\nFTP: 300W", blocks: 8, total: 1200, names: ["Effort 1/4", "Récup 1/4"] }
 ];
 

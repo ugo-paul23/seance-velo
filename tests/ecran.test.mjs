@@ -114,6 +114,24 @@ test("le texte du guide IA se copie", async () => {
   } finally { await browser.close(); }
 });
 
+test("signalement de bug : contient la séance collée, la lecture et le message", async () => {
+  const { browser, page } = await openApp();
+  try {
+    await paste(page, "10min @ 200W\n4x 1min @ 400W, 1min @ 100W");
+    await page.click("#bug summary");
+    await page.fill("#bugMsg", "les watts sont faux");
+    const report = await page.evaluate(() => window.SeanceVelo.bugReport());
+    assert.match(report, /les watts sont faux/);
+    assert.match(report, /4x 1min @ 400W, 1min @ 100W/);
+    assert.match(report, /9 blocs, 18:00/);
+    // Sans partage natif (Chromium bureau) : copie + message affiché.
+    await page.evaluate(() => { delete navigator.share; });
+    await page.click("#bugSend");
+    await page.waitForFunction(() => document.getElementById("bugStatus").textContent !== "", null, { timeout: 3000 });
+    assert.match(await page.textContent("#bugStatus"), /copié|Copie impossible/i);
+  } finally { await browser.close(); }
+});
+
 for (const device of ["iPhone SE", "Pixel 7", "iPad Mini landscape"]) {
   test(`l'écran de séance tient sans débordement sur ${device}`, async () => {
     const { browser, page } = await openApp({ device, fakeClock: true });
