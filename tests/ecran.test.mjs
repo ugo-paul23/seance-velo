@@ -147,7 +147,10 @@ for (const device of ["iPhone SE", "iPhone 13", "Pixel 7", "iPhone SE landscape"
           const b = box(document.getElementById(id));
           return b.right > innerWidth + 1 || b.bottom > innerHeight + 1 || b.left < -1 || b.top < -1 || b.width === 0;
         });
-        const p = box(document.querySelector(".prof-box"));
+        // Partie visible du graphique (sa zone peut être rognée par son conteneur).
+        const pb = box(document.querySelector(".prof-box")), g = box(document.querySelector(".global"));
+        const p = { left: pb.left, right: pb.right, top: Math.max(pb.top, g.top), bottom: Math.min(pb.bottom, g.bottom) };
+        p.height = Math.max(0, p.bottom - p.top);
         const hits = [".controls", ".opts", ".next"].filter(sel => {
           const c = box(document.querySelector(sel));
           return p.left < c.right - 1 && c.left < p.right - 1 && p.top < c.bottom - 1 && c.top < p.bottom - 1;
@@ -156,7 +159,8 @@ for (const device of ["iPhone SE", "iPhone 13", "Pixel 7", "iPhone SE landscape"
       });
       assert.deepEqual(r.out, [], "éléments hors écran");
       assert.deepEqual(r.hits, [], "le graphique recouvre des boutons");
-      assert.ok(r.profH >= 20, `graphique trop écrasé (${r.profH}px)`);
+      // 40 px minimum : laisse de la marge aux écarts de polices entre machines (GitHub n'a pas les mêmes).
+      assert.ok(r.profH >= 40, `graphique trop écrasé (${r.profH}px)`);
     } finally { await browser.close(); }
   });
 }

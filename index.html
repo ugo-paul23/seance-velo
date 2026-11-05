@@ -142,15 +142,21 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
 #reset.armed { border-color: var(--z4); color: var(--z4); }
 #done { position: absolute; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; padding: 24px; }
 #done h2 { font-family: var(--display); font-size: 56px; margin: 0; text-transform: uppercase; line-height: 1; }
+@media (orientation: portrait) and (max-height: 700px) {
+  /* Petits téléphones (iPhone SE…) : chiffres un peu plus petits pour laisser la place au graphique et aux boutons. */
+  #watts { font-size: min(34vw, 19vh); }
+  .big { font-size: min(14vw, 8vh); }
+  .controls button { min-height: 56px; }
+}
 @media (orientation: landscape) and (max-height: 560px) {
   /* Téléphone à l'horizontale : chiffres à gauche, commandes à droite, tout tient sans défiler. */
   #ride {
-    display: grid; grid-template-columns: 1.1fr 1fr; grid-template-rows: auto auto 1fr auto auto auto; column-gap: 16px; row-gap: 8px;
-    grid-template-areas: "top top" "wake wake" "watts duo" "bar next" "global controls" "global opts";
+    display: grid; grid-template-columns: 1.1fr 1fr; grid-template-rows: auto auto auto auto 1fr auto; column-gap: 16px; row-gap: 8px;
+    grid-template-areas: "top top" "wake wake" "watts duo" "bar next" "global controls" "opts opts";
   }
   .r-top { grid-area: top; } #wake { grid-area: wake; } #hydr { grid-area: wake; }
   .watts { grid-area: watts; align-self: center; } .duo { grid-area: duo; } .bar { grid-area: bar; align-self: center; }
-  .next { grid-area: next; } .global { grid-area: global; } .controls { grid-area: controls; } .opts { grid-area: opts; font-size: 13px; }
+  .next { grid-area: next; } .global { grid-area: global; } .controls { grid-area: controls; align-self: end; } .opts { grid-area: opts; font-size: 13px; }
   .controls button { min-height: 48px; }
   .opts label { min-height: 28px; }
   #watts { font-size: min(22vw, 30vh); }
@@ -165,8 +171,11 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
 @media (orientation: landscape) and (max-height: 340px) {
   /* Très petit écran à l'horizontale (iPhone SE) : libellés courts pour garder les options sur une ligne. */
   .opts .lg { display: none; } .opts .sh { display: inline; }
-  #ride { grid-template-rows: auto auto 1fr auto auto auto; grid-template-areas: "top top" "wake wake" "watts duo" "bar next" "global controls" "opts opts"; }
   .opts-btns { flex-wrap: nowrap; }
+  #watts { font-size: min(20vw, 25vh); }
+  .big { font-size: min(7vw, 11vh); }
+  .controls button { min-height: 40px; }
+  #ride { row-gap: 6px; padding-top: calc(env(safe-area-inset-top, 0px) + 6px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); }
   .controls button { font-size: 16px; white-space: nowrap; }
 }
 @media (prefers-reduced-motion: reduce) { #ride.flash::after { animation: none; } #ride { transition: none; } }
