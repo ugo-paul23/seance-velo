@@ -61,6 +61,11 @@ const CASES = [
   { name: "« 3 tours : »", text: "3 tours : 4min @ 280W, 2min @ 140W", blocks: 6, total: 1080, names: ["Effort 1/3", "Récup 1/3"] },
   { name: "100 répétitions", text: "100x 10sec @ 500W, 20sec @ 100W", blocks: 200, total: 3000 },
   { name: "secondes seules, tabulations, w minuscule", text: "45s @ 400W\n\t15s\t@\t100w", blocks: 2, total: 60 },
+  { name: "retours à la ligne perdus au copier-coller (réponse ChatGPT)", text: "10min @ 200W 4x 3min @ 215W, 1min @ 150W 10min @ 120W", blocks: 10, total: 2160, first: [[600, 200, 200, null], [180, 215, 215, null], [60, 150, 150, null]], noWarn: true },
+  { name: "retours à la ligne perdus, avec noms, FTP et total", text: IA_OK.replace(/\n/g, " "), blocks: 10, total: 2100, names: ["Échauffement", "Effort 1/4"], noWarn: true },
+  { name: "retours à la ligne perdus, en % de FTP", text: "10min @ 55-75% FTP 3x 8min @ 105%, 4min @ 50% 10min @ 50%", ftp: 300, blocks: 8, total: 3360 },
+  { name: "retours à la ligne perdus, nom avec chiffre", text: "Bloc 1: 5min @ 200W Z2: 20min @ 180W", blocks: 2, total: 1500, names: ["Bloc 1", "Z2"] },
+  { name: "« 200W pendant 10min » n'est pas découpé à tort", text: "200W pendant 10min\n5min @ 90rpm 250W", blocks: 2, total: 900 },
   { name: "effort sous la FTP reste nommé Effort", text: "4x 3min @ 264W, 2min @ 156W\nFTP: 300W", blocks: 8, total: 1200, names: ["Effort 1/4", "Récup 1/4"] }
 ];
 

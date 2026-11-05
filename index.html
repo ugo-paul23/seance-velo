@@ -235,7 +235,7 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
   <details>
     <summary>Ta séance est écrite autrement ?</summary>
     <p>Copie ce texte dans n'importe quelle IA (ChatGPT, Claude, Gemini…), colle ta séance à la fin, puis colle sa réponse ici.</p>
-    <pre id="prompt">Réécris ma séance de vélo ci-dessous dans ce format exact, une ligne par bloc, sans aucun autre texte (pas de guillemets, pas de numéros, pas de gras, pas de sous-liste). Exemples de lignes :
+    <pre id="prompt">Réécris ma séance de vélo ci-dessous dans ce format exact, une ligne par bloc, dans un bloc de code, sans aucun autre texte (pas de guillemets, pas de numéros, pas de gras, pas de sous-liste). Exemples de lignes :
 5min @ 85rpm, 215W
 10min from 118 to 215W
 4x 3min @ 100rpm, 264W, 2min @ 85rpm, 156W
@@ -385,9 +385,14 @@ Ma séance :
   const indentOf = s => (s.match(/^\s*/)[0].replace(/\t/g, "    ")).length;
   const bulleted = s => LIST_MARK.test(s.trim());
 
+  // Retours à la ligne perdus au copier-coller (« 10min @ 200W 4x 3min @ 215W, 1min @ 150W 10min @ 120W ») :
+  // une puissance suivie, sans virgule, d'une durée, d'un « 4x » ou d'un « Nom : » commence forcément un nouveau bloc.
+  const LOST_BREAK = /(\d\s*(?:w|watts?|%|rpm)(?![a-zà-ÿ])(?:\s*(?:de\s+)?ftp)?)[ \t\u00a0\u202f]+(?=\d+\s*(?:x|×|fois)\s*\d|\d+(?:[.,]\d+)?\s*(?:h|min|mn|sec|s|'|’|")(?![a-zà-ÿ])|[A-ZÀ-Ý][A-Za-zÀ-ÿ0-9'’ ]{0,30}\s?:)/gi;
+  const restoreBreaks = text => text.replace(LOST_BREAK, "$1\n");
+
   function parseSession(text) {
     const out = { segs: [], warnings: [], notes: [], ftp: null, total: null };
-    const lines = text.split(/\r?\n/);
+    const lines = restoreBreaks(text).split(/\r?\n/);
     let group = null; // répétition annoncée seule sur sa ligne (« 4x : ») suivie de ses blocs en sous-liste
 
     const flush = () => {
