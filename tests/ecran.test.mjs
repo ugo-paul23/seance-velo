@@ -133,20 +133,34 @@ test("signalement de bug : contient la séance collée, la lecture et le message
   } finally { await browser.close(); }
 });
 
-for (const device of ["iPhone SE", "Pixel 7", "iPad Mini landscape"]) {
-  test(`l'écran de séance tient sans débordement sur ${device}`, async () => {
+const LONG = "Échauffement: 10min @ 150W\n6x 6min @ 264W, 2min @ 156W"; // > 45 min : affiche aussi « Rappel boire »
+for (const device of ["iPhone SE", "iPhone 13", "Pixel 7", "iPhone SE landscape", "iPhone 13 landscape", "Pixel 7 landscape", "iPad Mini landscape"]) {
+  test(`l'écran de séance tient sans débordement ni chevauchement sur ${device}`, async () => {
     const { browser, page } = await openApp({ device, fakeClock: true });
     try {
-      await paste(page, SHORT, { fake: true });
+      await paste(page, LONG, { fake: true });
       await page.click("#go");
-      const over = await page.evaluate(() => {
-        const vw = innerWidth, vh = innerHeight;
-        return ["watts", "play", "nextb", "prev", "cd"].filter(id => {
-          const r = document.getElementById(id).getBoundingClientRect();
-          return r.right > vw + 1 || r.bottom > vh + 1 || r.left < -1 || r.width === 0;
+      await page.clock.runFor(300);
+      const r = await page.evaluate(() => {
+        const box = el => el.getBoundingClientRect();
+        const out = ["watts", "cd", "rpm", "nextTxt", "play", "nextb", "prev", "back", "mute", "hydrOn", "bugRide", "reset"].filter(id => {
+          const b = box(document.getElementById(id));
+          return b.right > innerWidth + 1 || b.bottom > innerHeight + 1 || b.left < -1 || b.top < -1 || b.width === 0;
         });
+        // Partie visible du graphique (sa zone peut être rognée par son conteneur).
+        const pb = box(document.querySelector(".prof-box")), g = box(document.querySelector(".global"));
+        const p = { left: pb.left, right: pb.right, top: Math.max(pb.top, g.top), bottom: Math.min(pb.bottom, g.bottom) };
+        p.height = Math.max(0, p.bottom - p.top);
+        const hits = [".controls", ".opts", ".next"].filter(sel => {
+          const c = box(document.querySelector(sel));
+          return p.left < c.right - 1 && c.left < p.right - 1 && p.top < c.bottom - 1 && c.top < p.bottom - 1;
+        });
+        return { out, hits, profH: Math.round(p.height) };
       });
-      assert.deepEqual(over, [], "éléments hors écran");
+      assert.deepEqual(r.out, [], "éléments hors écran");
+      assert.deepEqual(r.hits, [], "le graphique recouvre des boutons");
+      // 40 px minimum : laisse de la marge aux écarts de polices entre machines (GitHub n'a pas les mêmes).
+      assert.ok(r.profH >= 40, `graphique trop écrasé (${r.profH}px)`);
     } finally { await browser.close(); }
   });
 }
@@ -345,5 +359,50 @@ test("rotation du téléphone en pleine séance : tout reste à l'écran", async
       return r.right > innerWidth + 1 || r.bottom > innerHeight + 1 || r.width === 0;
     }));
     assert.deepEqual(over, []);
+  } finally { await browser.close(); }
+});
+
+test("bouton « ← Retour » visible sur l'écran de séance", async () => {
+  const { browser, page } = await openApp({ fakeClock: true });
+  try {
+    await paste(page, SHORT, { fake: true });
+    await page.click("#go");
+    assert.match(await page.textContent("#back"), /Retour/);
+    await page.click("#back");
+    assert.equal(await page.isVisible("#setup"), true);
+  } finally { await browser.close(); }
+});
+
+test("« Signaler un bug » en haut du réglage ouvre le formulaire", async () => {
+  const { browser, page } = await openApp({ fakeClock: true });
+  try {
+    assert.equal(await page.isVisible("#bugTop"), true, "visible sans faire défiler");
+    const box = await page.locator("#bugTop").boundingBox();
+    assert.ok(box.y < 200, "en haut de la page");
+    await page.click("#bugTop");
+    await page.clock.runFor(200);
+    assert.equal(await page.isVisible("#bugMsg"), true);
+  } finally { await browser.close(); }
+});
+
+test("« Signaler un bug » pendant la séance : met en pause et note où on en était", async () => {
+  const { browser, page } = await openApp({ fakeClock: true });
+  try {
+    await paste(page, SHORT, { fake: true });
+    await page.click("#go");
+    await page.click("#play");
+    await page.clock.runFor(12300);
+    assert.equal(await page.isVisible("#bugRide"), true);
+    await page.click("#bugRide");
+    await page.clock.runFor(200);
+    assert.equal(await page.isVisible("#setup"), true);
+    assert.equal(await page.isVisible("#bugMsg"), true);
+    const report = await page.evaluate(() => window.SeanceVelo.bugReport());
+    assert.match(report, /Signalé pendant la séance : 0:12 \/ 0:30, bloc 2\/5/);
+    await page.clock.runFor(5000);
+    assert.match(await page.textContent("#resume"), /0:12/, "le chrono doit être en pause");
+    // Un signalement fait ensuite depuis le réglage ne doit plus porter la position.
+    await page.click("#bugTop");
+    assert.doesNotMatch(await page.evaluate(() => window.SeanceVelo.bugReport()), /Signalé pendant la séance/);
   } finally { await browser.close(); }
 });
