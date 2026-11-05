@@ -10,6 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Aucun lien symbolique ni node_modules dans le dépôt (casse GitHub Pages)
+        run: |
+          bad=$(git ls-files -s | awk '$1 == "120000" {print $4}'; git ls-files node_modules)
+          if [ -n "$bad" ]; then echo "Fichiers à retirer du dépôt : $bad"; exit 1; fi
       - uses: actions/setup-node@v4
         with:
           node-version: 22
