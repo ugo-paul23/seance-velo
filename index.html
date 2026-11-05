@@ -155,7 +155,7 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
   <div class="field">
     <label for="seance">Ta séance</label>
     <textarea id="seance" spellcheck="false" autocomplete="off"></textarea>
-    <p class="hint" id="exampleHint">Exemple chargé. Remplace-le par ta séance (format « 3min @ 100rpm, 264W »).</p>
+    <p class="hint" id="exampleHint">Exemple chargé : colle ta séance, il sera remplacé.</p>
   </div>
 
   <div class="field">
@@ -190,13 +190,14 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
   <details>
     <summary>Ta séance est écrite autrement ?</summary>
     <p>Copie ce texte dans n'importe quelle IA (ChatGPT, Claude, Gemini…), colle ta séance à la fin, puis colle sa réponse ici.</p>
-    <pre id="prompt">Réécris ma séance de vélo ci-dessous dans ce format exact, une ligne par bloc, sans aucun autre texte :
-- un bloc : « 5min @ 85rpm, 215W »
-- une rampe : « 10min from 118 to 215W »
-- une répétition : « 4x 3min @ 100rpm, 264W, 2min @ 85rpm, 156W »
-Durées en min et sec (« 1min 30sec »). Puissance en W, ou en % de FTP (« 90% »). Cadence en rpm seulement si elle est donnée.
-Tu peux commencer une ligne par un nom suivi de deux-points (« Échauffement: 10min from 118 to 215W »).
-À la fin, ajoute « FTP: 300W » si la séance donne une FTP, et « Total: 77min » si elle donne une durée totale.
+    <pre id="prompt">Réécris ma séance de vélo ci-dessous dans ce format exact, une ligne par bloc, sans aucun autre texte (pas de guillemets, pas de numéros, pas de gras, pas de sous-liste). Exemples de lignes :
+5min @ 85rpm, 215W
+10min from 118 to 215W
+4x 3min @ 100rpm, 264W, 2min @ 85rpm, 156W
+Une répétition tient sur UNE seule ligne, comme ci-dessus.
+Durées en min et sec (1min 30sec). Puissance en W, ou en % de FTP (90%). Si la séance est en zones ou en ressenti, convertis en % de FTP. Cadence en rpm seulement si elle est donnée.
+Tu peux commencer une ligne par un nom suivi de deux-points (Échauffement: 10min from 118 to 215W).
+À la fin, ajoute FTP: 300W si la séance donne une FTP, et Total: 77min si elle donne une durée totale.
 
 Ma séance :
 [colle ta séance ici]</pre>
@@ -264,12 +265,23 @@ Ma séance :
     return 1;
   };
 
+  // Ce que les IA ajoutent souvent autour des lignes : puces, numéros, guillemets, gras markdown, titres.
+  const LIST_MARK = /^(?:[-•*·–—>]+|\d{1,2}[.)](?!\d)|#+)\s*/;
+  function clean(line) {
+    line = line.replace(/[​-‍⁠﻿]/g, "").replace(/\*\*|__|`/g, "").trim();
+    let prev;
+    do { prev = line; line = line.replace(LIST_MARK, "").replace(/^["«“”»]\s*/, "").replace(/\s*["»”“«]\s*$/, "").trim(); }
+    while (line !== prev);
+    return line.replace(/[«»“”]/g, " ");
+  }
+
   function normalize(line) {
     return line
       .replace(/[×✕]/g, "x")
       .replace(/[–—]/g, "-")
       .replace(/[()\[\]]/g, " ")
       .replace(/(\d+)'(\d{1,2})(?!\d)"?/g, "$1min $2sec")
+      .replace(/(\d+)\s*(?:min|mn)\s*(\d{2})(?![\d.,]|\s*(?:s|sec|secondes?|seconds?|w|watts?|%|rpm|tr|t\/|min|mn|'|"))/gi, "$1min $2sec")
       .replace(/(\d+)\s*h\s*(\d{2})(?!\d)/gi, "$1h $2min")
       .replace(/\b(\d{1,2}):(\d{2})\b(?!\s*(?:w|%|rpm))/gi, "$1min $2sec");
   }
@@ -311,14 +323,34 @@ Ma séance :
     return m[2] ? { lo: +m[1], hi: +m[2] } : { lo: +m[1], hi: +m[1] };
   }
 
+  // « 4x », « 4 x », « 4 fois », « 4 séries de », « 4 rounds of », « Répéter 4 fois »…
+  const REP_HEAD = /^(?:r[ée]p[ée]t(?:er|e|ition)?s?\s*:?\s*|repeat\s*:?\s*)?(\d+)\s*(?:x|fois|s[ée]ries?|sets?|rounds?|reps?|r[ée]p[ée]titions?|blocs?)\b\s*(?:de|of|:)?\s*/i;
+  const REP_TAIL = /\s*(?:x\s*(\d+)|(\d+)\s*(?:x|fois))\s*$/i;
+  const indentOf = s => (s.match(/^\s*/)[0].replace(/\t/g, "    ")).length;
+  const bulleted = s => LIST_MARK.test(s.trim());
+
   function parseSession(text) {
     const out = { segs: [], warnings: [], notes: [], ftp: null, total: null };
-    text.split(/\r?\n/).forEach((raw, i) => {
-      let line = normalize(raw.trim().replace(/^[-•*]\s*/, ""));
+    const lines = text.split(/\r?\n/);
+    let group = null; // répétition annoncée seule sur sa ligne (« 4x : ») suivie de ses blocs en sous-liste
+
+    const flush = () => {
+      if (!group) return;
+      const g = group; group = null;
+      if (!g.items.length) { out.warnings.push(`Ligne ${g.line} : répétition ×${g.reps} sans blocs en dessous, ignorée.`); return; }
+      for (let r = 0; r < g.reps; r++)
+        g.items.forEach((p, k) => out.segs.push({ ...p, label: p.label || g.label, rep: g.reps > 1 ? [r + 1, g.reps] : null, part: k, parts: g.items.length }));
+    };
+
+    lines.forEach((raw, i) => {
+      const n = i + 1;
+      if (group && raw.trim() && !(indentOf(raw) > group.indent || (!group.bullet && bulleted(raw)))) flush();
+      if (group && !raw.trim()) { if (group.items.length) flush(); return; }
+      let line = normalize(clean(raw));
       if (!line) return;
       let label = "";
       const colon = line.indexOf(":");
-      if (colon > 0 && !/\d\s*(min|sec|s|h|')/i.test(line.slice(0, colon))) {
+      if (colon > 0 && !/\d\s*(min|sec|s|h|')/i.test(line.slice(0, colon)) && !REP_HEAD.test(line.slice(0, colon + 1).trim() + " ")) {
         label = line.slice(0, colon).trim();
         line = line.slice(colon + 1).trim();
       }
@@ -330,21 +362,32 @@ Ma séance :
         const g = durationGroups(line); if (g.length) out.total = g.reduce((s, x) => s + x.sec, 0); return;
       }
       let reps = 1, m;
-      if ((m = line.match(/^(\d+)\s*(?:x|fois)\s*/i))) { reps = +m[1]; line = line.slice(m[0].length); }
-      else if ((m = line.match(/\s*x\s*(\d+)\s*$/i))) { reps = +m[1]; line = line.slice(0, m.index); }
+      if ((m = line.match(REP_HEAD))) { reps = +m[1]; line = line.slice(m[0].length); }
+      else if ((m = line.match(REP_TAIL))) { reps = +(m[1] || m[2]); line = line.slice(0, m.index); }
       const groups = durationGroups(line);
-      if (!groups.length) { out.notes.push(raw.trim()); return; }
+      if (!groups.length) {
+        if (reps > 1 && !group) { group = { reps, label, line: n, indent: indentOf(raw), bullet: bulleted(raw), items: [] }; return; }
+        out.notes.push(raw.trim()); return;
+      }
       const parts = groups.map((g, k) => {
         const seg = line.slice(g.start, k + 1 < groups.length ? groups[k + 1].start : line.length);
-        return { sec: Math.round(g.sec), power: parsePower(seg.slice(g.end - g.start)), rpm: parseRpm(seg) };
+        return { sec: Math.round(g.sec), power: parsePower(seg.slice(g.end - g.start)), rpm: parseRpm(seg), label, line: n };
       });
       const valid = parts.filter(p => p.power && p.sec > 0);
-      if (!valid.length) { out.notes.push(raw.trim()); return; }
-      if (valid.length < parts.length) out.warnings.push(`Ligne ${i + 1} : une partie sans puissance a été ignorée.`);
+      if (!valid.length) {
+        out.warnings.push(`Ligne ${n} ignorée : durée trouvée mais pas de puissance (W ou %) — « ${raw.trim().slice(0, 60)} ».`);
+        return;
+      }
+      if (valid.length < parts.length) out.warnings.push(`Ligne ${n} : une partie sans puissance a été ignorée.`);
+      if (group) {
+        for (let r = 0; r < reps; r++) valid.forEach(p => group.items.push(p));
+        return;
+      }
       for (let r = 0; r < reps; r++) {
-        valid.forEach((p, k) => out.segs.push({ ...p, label, rep: reps > 1 ? [r + 1, reps] : null, part: k, parts: valid.length, line: i + 1 }));
+        valid.forEach((p, k) => out.segs.push({ ...p, label, rep: reps > 1 ? [r + 1, reps] : null, part: k, parts: valid.length }));
       }
     });
+    flush();
     return out;
   }
 
@@ -368,13 +411,16 @@ Ma séance :
     const th = ftp ? [0.75, 0.9, 1.05] : [0.65, 0.8, 0.95];
     const zoneOf = w => { const p = w / ref; return p < th[0] ? 0 : p < th[1] ? 1 : p < th[2] ? 2 : 3; };
     let t = 0;
-    blocks.forEach(b => {
+    blocks.forEach((b, i) => {
       const peak = Math.max(b.a, b.b);
       b.zone = zoneOf(peak);
       b.sprint = (ftp && peak / ftp >= 1.2) || (b.zone === 3 && b.dur <= 60);
       let base = b.label || (b.sprint ? "Sprint" : b.ramp ? "Rampe" : ZONE_NAMES[b.zone]);
       if (b.rep && b.parts > 1 && !b.label) {
-        base = b.sprint ? "Sprint" : b.zone >= 2 ? "Effort" : "Récup";
+        // Dans une répétition, effort et récup se jugent l'un par rapport à l'autre, pas dans l'absolu.
+        const sib = blocks.slice(i - b.part, i - b.part + b.parts).map(x => Math.max(x.a, x.b));
+        const hi = Math.max(...sib), lo = Math.min(...sib);
+        base = b.sprint ? "Sprint" : hi === lo ? (b.zone >= 2 ? "Effort" : "Récup") : peak === hi ? "Effort" : peak === lo ? "Récup" : (b.zone >= 2 ? "Effort" : "Récup");
       }
       b.name = b.rep ? `${base} ${b.rep[0]}/${b.rep[1]}` : base;
       b.start = t; t += b.dur * 1000; b.end = t;
@@ -628,8 +674,17 @@ Ma séance :
 
   // ---------- Événements ----------
   let editTimer = null;
-  const onEdit = () => { clearTimeout(editTimer); editTimer = setTimeout(() => { S.elapsed = 0; refresh(); showResume(); store(); }, 250); };
+  const stripExample = () => {
+    // Collé à la suite de l'exemple (cas fréquent sur mobile) : on retire l'exemple.
+    const v = el.seance.value;
+    for (const sep of ["\n", ""]) {
+      if (v.startsWith(EXAMPLE + sep) && v.trim() !== EXAMPLE) { el.seance.value = v.slice(EXAMPLE.length).trim(); return; }
+      if (v.endsWith(sep + EXAMPLE) && v.trim() !== EXAMPLE) { el.seance.value = v.slice(0, v.length - EXAMPLE.length).trim(); return; }
+    }
+  };
+  const onEdit = () => { clearTimeout(editTimer); editTimer = setTimeout(() => { stripExample(); S.elapsed = 0; refresh(); showResume(); store(); }, 250); };
   el.seance.addEventListener("input", onEdit);
+  el.seance.addEventListener("focus", () => { if (el.seance.value.trim() === EXAMPLE) el.seance.select(); });
   el.ftp.addEventListener("input", () => { refresh(); store(); });
   el.go.addEventListener("click", () => { if (S.elapsed >= plan.total) S.elapsed = 0; openRide(); });
   el.resume.addEventListener("click", openRide);
@@ -659,15 +714,23 @@ Ma séance :
   $("hydrOn").addEventListener("change", store);
   $("copy").addEventListener("click", () => {
     const txt = $("prompt").textContent, btn = $("copy");
-    const ok = () => { btn.textContent = "Copié"; setTimeout(() => (btn.textContent = "Copier le texte"), 2000); };
+    let settled = false;
+    const ok = () => { if (settled) return; settled = true; btn.textContent = "Copié"; setTimeout(() => (btn.textContent = "Copier le texte"), 2000); };
     const fallback = () => {
+      if (settled) return; settled = true;
+      // Navigateurs intégrés (Instagram, Facebook…) : l'API presse-papiers est souvent refusée, l'ancienne méthode passe.
       const r = document.createRange(); r.selectNodeContents($("prompt"));
       const s = getSelection(); s.removeAllRanges(); s.addRange(r);
-      btn.textContent = "Texte sélectionné : copie-le";
+      let copied = false;
+      try { copied = document.execCommand("copy"); } catch (e) {}
+      if (copied) { settled = false; ok(); } else btn.textContent = "Texte sélectionné : copie-le";
     };
-    try { navigator.clipboard.writeText(txt).then(ok, fallback); } catch (e) { fallback(); }
+    try { navigator.clipboard.writeText(txt).then(ok, fallback); setTimeout(fallback, 1500); } catch (e) { fallback(); }
   });
   window.addEventListener("resize", () => drawProfile($("profPreview"), plan, null));
+
+  // Point d'accès pour la routine de test (tests/), sans effet sur l'écran.
+  window.SeanceVelo = { read: (text, ftp) => buildBlocks(parseSession(text), ftp || null), EXAMPLE };
 
   // ---------- Démarrage ----------
   const saved = load();
