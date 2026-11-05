@@ -103,7 +103,8 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
 .r-top .name { font-weight: 700; font-size: 18px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .r-top .count { color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 8px; font-weight: 600; }
 #back { background: transparent; border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; cursor: pointer; flex-shrink: 0; }
-#wake { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+#wake { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; min-width: 0; }
+#wake span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 #wake i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
 #wake.ok i { background: var(--z2); }
 #wake.mid i { background: var(--warn); }
@@ -168,9 +169,13 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
   .opts input { width: 18px; height: 18px; }
   #bugRide, #reset { padding: 4px 8px; white-space: nowrap; }
 }
-@media (orientation: landscape) and (max-height: 340px) {
-  /* Très petit écran à l'horizontale (iPhone SE) : libellés courts pour garder les options sur une ligne. */
+@media (max-width: 400px), (orientation: landscape) and (max-height: 340px) {
+  /* Petits écrans : libellés courts pour que les options tiennent sur une ligne, quelle que soit la police. */
   .opts .lg { display: none; } .opts .sh { display: inline; }
+  .opts { flex-wrap: nowrap; gap: 8px; } .opts-btns { flex-wrap: nowrap; }
+  #bugRide, #reset { padding: 6px 8px; white-space: nowrap; }
+}
+@media (orientation: landscape) and (max-height: 340px) {
   .opts-btns { flex-wrap: nowrap; }
   #watts { font-size: min(20vw, 25vh); }
   .big { font-size: min(7vw, 11vh); }
@@ -290,7 +295,7 @@ Ma séance :
     <label id="hydrOpt"><input type="checkbox" id="hydrOn" checked> <span class="lg">Rappel boire</span><span class="sh">Boire</span></label>
     <span class="opts-btns">
       <button id="bugRide" type="button" aria-label="Signaler un bug">Bug ?</button>
-      <button id="reset" type="button">Remettre à zéro</button>
+      <button id="reset" type="button" aria-label="Remettre à zéro"><span class="lg">Remettre à zéro</span><span class="sh">↺ Zéro</span></button>
     </span>
   </div>
 
@@ -859,11 +864,11 @@ Ma séance :
   $("reset").addEventListener("click", e => {
     const btn = e.currentTarget;
     if (!btn.classList.contains("armed")) {
-      btn.classList.add("armed"); btn.textContent = "Touche encore pour confirmer";
-      armTimer = setTimeout(() => { btn.classList.remove("armed"); btn.textContent = "Remettre à zéro"; }, 3000);
+      btn.classList.add("armed"); btn.innerHTML = '<span class="lg">Touche encore pour confirmer</span><span class="sh">Confirmer ?</span>';
+      armTimer = setTimeout(() => { btn.classList.remove("armed"); btn.innerHTML = '<span class="lg">Remettre à zéro</span><span class="sh">↺ Zéro</span>'; }, 3000);
       return;
     }
-    clearTimeout(armTimer); btn.classList.remove("armed"); btn.textContent = "Remettre à zéro";
+    clearTimeout(armTimer); btn.classList.remove("armed"); btn.innerHTML = '<span class="lg">Remettre à zéro</span><span class="sh">↺ Zéro</span>';
     setRunning(false); jumpTo(0); $("play").textContent = "Démarrer";
   });
   $("mute").addEventListener("change", store);
