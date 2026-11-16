@@ -10,6 +10,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Séance vélo">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <style>body{margin:0}#setup{padding-top:calc(env(safe-area-inset-top,0px) + 28px)!important}</style>
 <title>Écran de séance vélo</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -102,6 +105,8 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
 .r-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .r-top .name { font-weight: 700; font-size: 18px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .r-top .count { color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 8px; font-weight: 600; }
+.top-btns { display: flex; gap: 8px; flex-shrink: 0; }
+#fs { background: transparent; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; cursor: pointer; font-size: 18px; line-height: 1; }
 #back { background: transparent; border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; cursor: pointer; flex-shrink: 0; }
 #wake { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; min-width: 0; }
 #wake span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -183,6 +188,19 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
   #ride { row-gap: 6px; padding-top: calc(env(safe-area-inset-top, 0px) + 6px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); }
   .controls button { font-size: 16px; white-space: nowrap; }
 }
+@media (orientation: landscape) and (max-height: 300px) {
+  /* Paysage avec les barres du navigateur (Safari + onglets) : on retire le superflu pour garder le graphique. */
+  #wake { display: none; }
+  #ride { grid-template-rows: auto auto auto 1fr auto; grid-template-areas: "top top" "watts duo" "bar next" "global controls" "opts opts"; row-gap: 4px; }
+  #hydr { grid-area: next; }
+  .r-top .name { font-size: 15px; }
+  #back, #fs { padding: 3px 9px; }
+  #watts { font-size: min(18vw, 24vh); }
+  .big { font-size: min(7vw, 12vh); }
+  .lbl { font-size: 10px; }
+  .controls button { min-height: 34px; font-size: 15px; }
+  .opts label { min-height: 22px; }
+}
 @media (prefers-reduced-motion: reduce) { #ride.flash::after { animation: none; } #ride { transition: none; } }
 </style>
 </head>
@@ -230,6 +248,7 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
   <div class="actions">
     <button class="btn-main" id="go" type="button">Ouvrir l'écran de séance</button>
     <button class="btn-ghost" id="resume" type="button" hidden></button>
+    <p class="hint" id="iosHint" hidden></p>
   </div>
 
   <details>
@@ -253,7 +272,10 @@ Ma séance :
 <section id="ride" hidden aria-live="off">
   <div class="r-top">
     <div class="name"><span id="bname">—</span><span class="count" id="bcount"></span></div>
-    <button id="back" type="button" aria-label="Retour au réglage de la séance">← Retour</button>
+    <span class="top-btns">
+      <button id="fs" type="button" aria-label="Plein écran" hidden>⛶</button>
+      <button id="back" type="button" aria-label="Retour au réglage de la séance">← Retour</button>
+    </span>
   </div>
   <div id="wake"><i></i><span id="wakeTxt">Écran : maintien activé au démarrage</span></div>
 
@@ -753,6 +775,32 @@ Ma séance :
   }
   function jumpTo(ms) { S.elapsed = Math.max(0, Math.min(plan.total, ms)); S.last = Date.now(); S.silentJump = true; tick(); store(); }
 
+  // ---------- Plein écran ----------
+  // Android, iPad, ordinateur : API plein écran. iPhone : Safari ne le permet pas, seul l'ajout à l'écran d'accueil
+  // ouvre l'app sans barres (mode « standalone ») : on l'explique une fois, seulement sur iPhone hors de ce mode.
+  const docEl = document.documentElement;
+  const canFs = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled) && !!(docEl.requestFullscreen || docEl.webkitRequestFullscreen);
+  const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const standalone = (window.matchMedia && matchMedia("(display-mode: standalone), (display-mode: fullscreen)").matches) || navigator.standalone === true;
+  const isIPhone = /iPhone|iPod/.test(navigator.userAgent);
+  const inAppBrowser = /Instagram|FBAN|FBAV/.test(navigator.userAgent);
+  $("fs").hidden = !canFs;
+  const renderFs = () => { $("fs").textContent = isFs() ? "⤡" : "⛶"; $("fs").setAttribute("aria-label", isFs() ? "Quitter le plein écran" : "Plein écran"); };
+  $("fs").addEventListener("click", () => {
+    try {
+      if (isFs()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      else { const p = (docEl.requestFullscreen || docEl.webkitRequestFullscreen).call(docEl); if (p && p.catch) p.catch(() => {}); }
+    } catch (e) {}
+  });
+  document.addEventListener("fullscreenchange", renderFs);
+  document.addEventListener("webkitfullscreenchange", renderFs);
+  if (isIPhone && !standalone) {
+    $("iosHint").hidden = false;
+    $("iosHint").textContent = inAppBrowser
+      ? "Plein écran sur iPhone : ouvre cette page dans Safari (menu ••• → Ouvrir dans le navigateur), puis Partager → « Sur l'écran d'accueil »."
+      : "Plein écran sur iPhone : Partager → « Sur l'écran d'accueil », puis ouvre l'app depuis son icône.";
+  }
+
   function openRide() {
     el.setup.hidden = true; el.ride.hidden = false;
     $("play").textContent = S.running ? "Pause" : (S.elapsed > 0 ? "Reprendre" : "Démarrer");
@@ -760,6 +808,7 @@ Ma séance :
     renderWake(); tick();
   }
   function closeRide() {
+    if (isFs()) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (e) {} }
     setRunning(false); el.ride.hidden = true; el.setup.hidden = false;
     refresh(); showResume();
     window.scrollTo(0, 0);
