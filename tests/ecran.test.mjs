@@ -466,7 +466,7 @@ test("sans API plein écran (iPhone) : pas de bouton, mais l'aide « écran d'ac
   const { chromium, devices } = await import("playwright");
   const browser = await chromium.launch();
   try {
-    for (const [ua, re] of [[devices["iPhone 13"].userAgent, /Partager → « Sur l'écran d'accueil »/], [devices["iPhone 13"].userAgent + " Instagram 300.0", /ouvre cette page dans Safari/]]) {
+    for (const [ua, re] of [[devices["iPhone 13"].userAgent, /Partager → «\u00a0Sur l'écran d'accueil\u00a0»/], [devices["iPhone 13"].userAgent + " Instagram 300.0", /ouvre cette page dans Safari/]]) {
       const context = await browser.newContext({ ...devices["iPhone 13"], userAgent: ua });
       await context.addInitScript(() => {
         Object.defineProperty(Document.prototype, "fullscreenEnabled", { get: () => false });
@@ -477,6 +477,8 @@ test("sans API plein écran (iPhone) : pas de bouton, mais l'aide « écran d'ac
       await page.goto(PAGE_URL);
       assert.equal(await page.isVisible("#iosHint"), true);
       assert.match(await page.textContent("#iosHint"), re);
+      assert.equal(await page.isVisible("#howto"), true, "lien vers la vidéo tuto");
+      assert.equal(await page.getAttribute("#howto", "href"), "https://www.instagram.com/reel/Df137wnO7Ij/");
       await page.fill("#seance", "10sec @ 200W");
       await page.waitForTimeout(400);
       await page.click("#go");
@@ -486,9 +488,12 @@ test("sans API plein écran (iPhone) : pas de bouton, mais l'aide « écran d'ac
   } finally { await browser.close(); }
 });
 
-test("pas d'aide iPhone sur Android", async () => {
+test("pas d'aide iPhone ni vidéo tuto sur Android", async () => {
   const { browser, page } = await openApp({ device: "Pixel 7" });
-  try { assert.equal(await page.isVisible("#iosHint"), false); } finally { await browser.close(); }
+  try {
+    assert.equal(await page.isVisible("#iosHint"), false);
+    assert.equal(await page.isVisible("#howto"), false);
+  } finally { await browser.close(); }
 });
 
 test("manifeste et icônes pour l'écran d'accueil", async () => {

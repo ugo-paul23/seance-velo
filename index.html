@@ -84,6 +84,7 @@ td.w { font-weight: 700; }
   background: var(--btn); color: var(--btn-fg); border: 0; border-radius: 14px; padding: 18px; font-weight: 700; font-size: 18px; cursor: pointer;
 }
 .btn-main:disabled { opacity: .35; cursor: not-allowed; }
+.video-btn { display: block; text-align: center; text-decoration: none; color: var(--fg); }
 .btn-ghost { background: transparent; border: 1px solid var(--line); border-radius: 14px; padding: 14px; cursor: pointer; font-weight: 600; }
 details { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
 summary { cursor: pointer; font-weight: 600; }
@@ -249,6 +250,7 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
     <button class="btn-main" id="go" type="button">Ouvrir l'écran de séance</button>
     <button class="btn-ghost" id="resume" type="button" hidden></button>
     <p class="hint" id="iosHint" hidden></p>
+    <a class="btn-ghost video-btn" id="howto" href="https://www.instagram.com/reel/Df137wnO7Ij/" target="_blank" rel="noopener" hidden>▶ Vidéo : mettre l'app en plein écran</a>
   </div>
 
   <details>
@@ -796,9 +798,10 @@ Ma séance :
   document.addEventListener("webkitfullscreenchange", renderFs);
   if (isIPhone && !standalone) {
     $("iosHint").hidden = false;
+    $("howto").hidden = false;
     $("iosHint").textContent = inAppBrowser
-      ? "Plein écran sur iPhone : ouvre cette page dans Safari (menu ••• → Ouvrir dans le navigateur), puis Partager → « Sur l'écran d'accueil »."
-      : "Plein écran sur iPhone : Partager → « Sur l'écran d'accueil », puis ouvre l'app depuis son icône.";
+      ? "Plein écran sur iPhone : ouvre cette page dans Safari (menu ••• → Ouvrir dans le navigateur), puis Partager → « Sur l'écran d'accueil »."
+      : "Plein écran sur iPhone : Partager → « Sur l'écran d'accueil », puis ouvre l'app depuis son icône.";
   }
 
   function openRide() {
