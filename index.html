@@ -76,6 +76,22 @@ input#ftp { width: 110px; background: var(--panel); border: 1px solid var(--line
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; max-height: 320px; overflow-y: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.c-sh { display: none; }
+@media (max-width: 430px) {
+  /* Téléphone en portrait : les 4 colonnes utiles tiennent sans défilement horizontal. */
+  table { font-size: 13px; }
+  th, td { padding: 7px 5px; }
+  th:first-child, td:first-child { display: none; }
+  th { font-size: 11px; letter-spacing: .03em; }
+  .c-lg { display: none; } .c-sh { display: inline; }
+  .dot { margin-right: 5px; }
+}
+@media (max-width: 360px) {
+  table { font-size: 12px; }
+  th, td { padding: 7px 3px; }
+  th { font-size: 10px; letter-spacing: 0; }
+  .dot { width: 8px; height: 8px; margin-right: 4px; }
+}
 th { position: sticky; top: 0; background: var(--panel); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 td.w { font-weight: 700; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; }
@@ -166,8 +182,8 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
   .next { grid-area: next; } .global { grid-area: global; } .controls { grid-area: controls; align-self: end; } .opts { grid-area: opts; font-size: 13px; }
   .controls button { min-height: 48px; }
   .opts label { min-height: 28px; }
-  #watts { font-size: min(22vw, 30vh); }
-  .big { font-size: min(8vw, 13vh); }
+  #watts { font-size: min(18vw, 23vh); }
+  .big { font-size: min(6.5vw, 10vh); }
   .duo > div { padding: 4px 10px; }
   .next { padding: 6px 12px; } .next b { font-size: 17px; }
   #wake { font-size: 11px; }
@@ -183,8 +199,8 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
 }
 @media (orientation: landscape) and (max-height: 340px) {
   .opts-btns { flex-wrap: nowrap; }
-  #watts { font-size: min(20vw, 25vh); }
-  .big { font-size: min(7vw, 11vh); }
+  #watts { font-size: min(18vw, 21vh); }
+  .big { font-size: min(6vw, 9.5vh); }
   .controls button { min-height: 40px; }
   #ride { row-gap: 6px; padding-top: calc(env(safe-area-inset-top, 0px) + 6px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); }
   .controls button { font-size: 16px; white-space: nowrap; }
@@ -240,7 +256,7 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
     <canvas id="profPreview" aria-label="Profil de la séance"></canvas>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>#</th><th>Bloc</th><th>Durée</th><th>Puissance</th><th>Cadence</th></tr></thead>
+        <thead><tr><th>#</th><th>Bloc</th><th>Durée</th><th>Puissance</th><th><span class="c-lg">Cadence</span><span class="c-sh">rpm</span></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
