@@ -285,6 +285,7 @@ Ma séance :
 [colle ta séance ici]</pre>
     <button class="btn-ghost" id="copy" type="button">Copier le texte</button>
   </details>
+  <p class="hint" id="statsNote" hidden>Statistiques de visite anonymes, sans cookies (GoatCounter). Le contenu de ta séance n'est jamais envoyé.</p>
 </main>
 
 <section id="ride" hidden aria-live="off">
@@ -733,7 +734,7 @@ Ma séance :
         const nb = bl[idx];
         beep(nb.sprint ? 1320 : 740, 0.6, 0.35); buzz([220, 90, 220]); flash();
       }
-      if (finished && S.running) { beep(520, 0.9, 0.35); buzz([400]); }
+      if (finished && S.running) { beep(520, 0.9, 0.35); buzz([400]); track("seance-terminee"); }
       S.idx = idx; S.lastRem = null; S.silentJump = false;
     }
     if (finished) {
@@ -793,6 +794,30 @@ Ma séance :
   }
   function jumpTo(ms) { S.elapsed = Math.max(0, Math.min(plan.total, ms)); S.last = Date.now(); S.silentJump = true; tick(); store(); }
 
+  // ---------- Statistiques anonymes (GoatCounter) ----------
+  // Désactivé tant que GC_CODE est vide. Aucun cookie, pas d'IP stockée, jamais le texte de la séance :
+  // seulement des visites et des actions (« seance-lancee »…). Ignoré en local (file://, localhost) par GoatCounter.
+  const GC_CODE = "";
+  const sentOnce = new Set();
+  function track(name, once) {
+    if (!GC_CODE || (once && sentOnce.has(name))) return;
+    if (once) sentOnce.add(name);
+    try {
+      const send = () => window.goatcounter.count({ path: "action/" + name, title: name, event: true });
+      if (window.goatcounter && window.goatcounter.count) send();
+      else (window.__gcQueue = window.__gcQueue || []).push(send);
+    } catch (e) {}
+  }
+  if (GC_CODE) {
+    $("statsNote").hidden = false;
+    const sc = document.createElement("script");
+    sc.async = true; sc.src = "https://gc.zgo.at/count.js";
+    sc.dataset.goatcounter = `https://${GC_CODE}.goatcounter.com/count`;
+    sc.onload = () => { (window.__gcQueue || []).splice(0).forEach(f => { try { f(); } catch (e) {} }); };
+    document.head.appendChild(sc);
+  }
+  window.SeanceVelo_track = track; // pour les tests
+
   // ---------- Plein écran ----------
   // Android, iPad, ordinateur : API plein écran. iPhone : Safari ne le permet pas, seul l'ajout à l'écran d'accueil
   // ouvre l'app sans barres (mode « standalone ») : on l'explique une fois, seulement sur iPhone hors de ce mode.
@@ -805,6 +830,7 @@ Ma séance :
   $("fs").hidden = !canFs;
   const renderFs = () => { $("fs").textContent = isFs() ? "⤡" : "⛶"; $("fs").setAttribute("aria-label", isFs() ? "Quitter le plein écran" : "Plein écran"); };
   $("fs").addEventListener("click", () => {
+    if (!isFs()) track("plein-ecran", true);
     try {
       if (isFs()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
       else { const p = (docEl.requestFullscreen || docEl.webkitRequestFullscreen).call(docEl); if (p && p.catch) p.catch(() => {}); }
@@ -881,6 +907,7 @@ Ma séance :
     } catch (e) { return false; }
   }
   async function reportBug(fromRide) {
+    track(fromRide ? "bug-pendant-seance" : "bug");
     if (fromRide) {
       bugFromRide = { elapsed: S.elapsed, idx: Math.min(blockAt(S.elapsed), plan.blocks.length - 1) };
       setRunning(false); // la séance attend en pause pendant qu'on écrit le message
@@ -904,11 +931,16 @@ Ma séance :
       if (v.endsWith(sep + EXAMPLE) && v.trim() !== EXAMPLE) { el.seance.value = v.slice(0, v.length - EXAMPLE.length).trim(); return; }
     }
   };
-  const onEdit = () => { clearTimeout(editTimer); editTimer = setTimeout(() => { stripExample(); S.elapsed = 0; refresh(); showResume(); store(); }, 250); };
+  const onEdit = () => { clearTimeout(editTimer); editTimer = setTimeout(() => {
+    stripExample(); S.elapsed = 0; refresh(); showResume(); store();
+    // Une fois par visite : la séance collée a-t-elle été lue ? (« 0 bloc » = le cas « ça marche pas »)
+    if (el.seance.value.trim()) track(plan.blocks.length ? "seance-lue" : "lecture-0-bloc", true);
+  }, 250); };
   el.seance.addEventListener("input", onEdit);
   el.seance.addEventListener("focus", () => { if (el.seance.value.trim() === EXAMPLE) el.seance.select(); });
   el.ftp.addEventListener("input", () => { refresh(); store(); });
-  el.go.addEventListener("click", () => { if (S.elapsed >= plan.total) S.elapsed = 0; openRide(); });
+  el.go.addEventListener("click", () => { if (S.elapsed >= plan.total) S.elapsed = 0; track("seance-lancee"); openRide(); });
+  $("howto").addEventListener("click", () => track("video-tuto"));
   el.resume.addEventListener("click", openRide);
   $("back").addEventListener("click", closeRide);
   $("doneBack").addEventListener("click", () => { S.elapsed = 0; closeRide(); });

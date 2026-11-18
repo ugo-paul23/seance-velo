@@ -21,3 +21,7 @@ npm test
 
 - **Android, iPad, ordinateur** : bouton ⛶ en haut de l'écran de séance (API plein écran du navigateur).
 - **iPhone** : Safari ne permet pas le plein écran d'une page. Il faut l'ajouter à l'écran d'accueil (Partager → « Sur l'écran d'accueil ») : l'app s'ouvre alors sans barres, grâce à `manifest.webmanifest` et `apple-touch-icon.png`. Une aide s'affiche sous le bouton principal, sur iPhone seulement (avec une variante pour le navigateur d'Instagram, d'où l'ajout est impossible).
+
+## Statistiques (GoatCounter)
+
+Désactivées tant que `GC_CODE` est vide dans `index.html`. Une fois renseigné (code du compte goatcounter.com), la page compte les visites et ces actions, sans cookies ni texte de séance : `seance-lue` et `lecture-0-bloc` (une fois par visite), `seance-lancee`, `seance-terminee`, `bug`, `bug-pendant-seance`, `video-tuto`, `plein-ecran`. Tableau de bord : `https://<code>.goatcounter.com`.
