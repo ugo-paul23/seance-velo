@@ -512,3 +512,57 @@ test("manifeste et icônes pour l'écran d'accueil", async () => {
   }
   assert.deepEqual(size("apple-touch-icon.png"), [180, 180]);
 });
+
+// ---------- Statistiques anonymes (GoatCounter) ----------
+test("statistiques désactivées (pas de code) : aucune requête vers GoatCounter, pas de mention", async () => {
+  const { browser, page } = await openApp({ fakeClock: true });
+  try {
+    const hits = [];
+    page.on("request", r => { if (/goatcounter|gc\.zgo\.at/.test(r.url())) hits.push(r.url()); });
+    await paste(page, SHORT, { fake: true });
+    await page.click("#go");
+    assert.deepEqual(hits, []);
+    assert.equal(await page.isHidden("#statsNote"), true);
+  } finally { await browser.close(); }
+});
+
+test("statistiques activées : compte les actions, jamais le texte de la séance", async () => {
+  const fs = await import("node:fs"), os = await import("node:os"), path = await import("node:path");
+  const { chromium, devices } = await import("playwright");
+  const { fileURLToPath } = await import("node:url");
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "seance-gc-"));
+  const html = fs.readFileSync(path.join(root, "index.html"), "utf8").replace('const GC_CODE = "";', 'const GC_CODE = "code-de-test";');
+  assert.notEqual(html, fs.readFileSync(path.join(root, "index.html"), "utf8"), "GC_CODE introuvable dans index.html");
+  fs.writeFileSync(path.join(tmp, "index.html"), html);
+  const browser = await chromium.launch();
+  try {
+    const context = await browser.newContext({ ...devices["iPhone 13"] });
+    const page = await context.newPage();
+    await page.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    let scriptAttr = null;
+    // Faux script GoatCounter : enregistre les appels au lieu de les envoyer.
+    await page.route("https://gc.zgo.at/count.js", r => r.fulfill({ contentType: "text/javascript",
+      body: "window.__sent=[];window.goatcounter={count:function(o){window.__sent.push(o)}};" }));
+    await page.clock.install();
+    await page.goto("file://" + path.join(tmp, "index.html"));
+    await page.clock.runFor(300);
+    scriptAttr = await page.evaluate(() => document.querySelector('script[src="https://gc.zgo.at/count.js"]')?.dataset.goatcounter);
+    assert.equal(scriptAttr, "https://code-de-test.goatcounter.com/count");
+    assert.equal(await page.isVisible("#statsNote"), true);
+    await page.fill("#seance", "zzz");                       // illisible → lecture-0-bloc
+    await page.clock.runFor(400);
+    await page.fill("#seance", "10sec @ 200W\n5sec @ 300W"); // lisible → seance-lue
+    await page.clock.runFor(400);
+    await page.fill("#seance", "10sec @ 210W\n5sec @ 300W"); // une seule fois par visite
+    await page.clock.runFor(400);
+    await page.click("#go");
+    await page.click("#play");
+    await page.clock.runFor(20000);                         // fin de séance
+    const sent = await page.evaluate(() => window.__sent);
+    const paths = sent.map(o => o.path);
+    assert.deepEqual(paths, ["action/lecture-0-bloc", "action/seance-lue", "action/seance-lancee", "action/seance-terminee"]);
+    assert.ok(sent.every(o => o.event === true));
+    assert.doesNotMatch(JSON.stringify(sent), /200W|300W|zzz/, "le texte de la séance ne doit jamais partir");
+  } finally { await browser.close(); fs.rmSync(tmp, { recursive: true, force: true }); }
+});

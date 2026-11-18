@@ -76,6 +76,22 @@ input#ftp { width: 110px; background: var(--panel); border: 1px solid var(--line
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; max-height: 320px; overflow-y: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.c-sh { display: none; }
+@media (max-width: 430px) {
+  /* Téléphone en portrait : les 4 colonnes utiles tiennent sans défilement horizontal. */
+  table { font-size: 13px; }
+  th, td { padding: 7px 5px; }
+  th:first-child, td:first-child { display: none; }
+  th { font-size: 11px; letter-spacing: .03em; }
+  .c-lg { display: none; } .c-sh { display: inline; }
+  .dot { margin-right: 5px; }
+}
+@media (max-width: 360px) {
+  table { font-size: 12px; }
+  th, td { padding: 7px 3px; }
+  th { font-size: 10px; letter-spacing: 0; }
+  .dot { width: 8px; height: 8px; margin-right: 4px; }
+}
 th { position: sticky; top: 0; background: var(--panel); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 td.w { font-weight: 700; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; }
@@ -166,8 +182,8 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
   .next { grid-area: next; } .global { grid-area: global; } .controls { grid-area: controls; align-self: end; } .opts { grid-area: opts; font-size: 13px; }
   .controls button { min-height: 48px; }
   .opts label { min-height: 28px; }
-  #watts { font-size: min(22vw, 30vh); }
-  .big { font-size: min(8vw, 13vh); }
+  #watts { font-size: min(18vw, 23vh); }
+  .big { font-size: min(6.5vw, 10vh); }
   .duo > div { padding: 4px 10px; }
   .next { padding: 6px 12px; } .next b { font-size: 17px; }
   #wake { font-size: 11px; }
@@ -183,8 +199,8 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
 }
 @media (orientation: landscape) and (max-height: 340px) {
   .opts-btns { flex-wrap: nowrap; }
-  #watts { font-size: min(20vw, 25vh); }
-  .big { font-size: min(7vw, 11vh); }
+  #watts { font-size: min(18vw, 21vh); }
+  .big { font-size: min(6vw, 9.5vh); }
   .controls button { min-height: 40px; }
   #ride { row-gap: 6px; padding-top: calc(env(safe-area-inset-top, 0px) + 6px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); }
   .controls button { font-size: 16px; white-space: nowrap; }
@@ -240,7 +256,7 @@ pre#prompt { white-space: pre-wrap; background: var(--panel); border-radius: 8px
     <canvas id="profPreview" aria-label="Profil de la séance"></canvas>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>#</th><th>Bloc</th><th>Durée</th><th>Puissance</th><th>Cadence</th></tr></thead>
+        <thead><tr><th>#</th><th>Bloc</th><th>Durée</th><th>Puissance</th><th><span class="c-lg">Cadence</span><span class="c-sh">rpm</span></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
@@ -269,6 +285,7 @@ Ma séance :
 [colle ta séance ici]</pre>
     <button class="btn-ghost" id="copy" type="button">Copier le texte</button>
   </details>
+  <p class="hint" id="statsNote" hidden>Statistiques de visite anonymes, sans cookies (GoatCounter). Le contenu de ta séance n'est jamais envoyé.</p>
 </main>
 
 <section id="ride" hidden aria-live="off">
@@ -717,7 +734,7 @@ Ma séance :
         const nb = bl[idx];
         beep(nb.sprint ? 1320 : 740, 0.6, 0.35); buzz([220, 90, 220]); flash();
       }
-      if (finished && S.running) { beep(520, 0.9, 0.35); buzz([400]); }
+      if (finished && S.running) { beep(520, 0.9, 0.35); buzz([400]); track("seance-terminee"); }
       S.idx = idx; S.lastRem = null; S.silentJump = false;
     }
     if (finished) {
@@ -777,6 +794,30 @@ Ma séance :
   }
   function jumpTo(ms) { S.elapsed = Math.max(0, Math.min(plan.total, ms)); S.last = Date.now(); S.silentJump = true; tick(); store(); }
 
+  // ---------- Statistiques anonymes (GoatCounter) ----------
+  // Désactivé tant que GC_CODE est vide. Aucun cookie, pas d'IP stockée, jamais le texte de la séance :
+  // seulement des visites et des actions (« seance-lancee »…). Ignoré en local (file://, localhost) par GoatCounter.
+  const GC_CODE = "";
+  const sentOnce = new Set();
+  function track(name, once) {
+    if (!GC_CODE || (once && sentOnce.has(name))) return;
+    if (once) sentOnce.add(name);
+    try {
+      const send = () => window.goatcounter.count({ path: "action/" + name, title: name, event: true });
+      if (window.goatcounter && window.goatcounter.count) send();
+      else (window.__gcQueue = window.__gcQueue || []).push(send);
+    } catch (e) {}
+  }
+  if (GC_CODE) {
+    $("statsNote").hidden = false;
+    const sc = document.createElement("script");
+    sc.async = true; sc.src = "https://gc.zgo.at/count.js";
+    sc.dataset.goatcounter = `https://${GC_CODE}.goatcounter.com/count`;
+    sc.onload = () => { (window.__gcQueue || []).splice(0).forEach(f => { try { f(); } catch (e) {} }); };
+    document.head.appendChild(sc);
+  }
+  window.SeanceVelo_track = track; // pour les tests
+
   // ---------- Plein écran ----------
   // Android, iPad, ordinateur : API plein écran. iPhone : Safari ne le permet pas, seul l'ajout à l'écran d'accueil
   // ouvre l'app sans barres (mode « standalone ») : on l'explique une fois, seulement sur iPhone hors de ce mode.
@@ -789,6 +830,7 @@ Ma séance :
   $("fs").hidden = !canFs;
   const renderFs = () => { $("fs").textContent = isFs() ? "⤡" : "⛶"; $("fs").setAttribute("aria-label", isFs() ? "Quitter le plein écran" : "Plein écran"); };
   $("fs").addEventListener("click", () => {
+    if (!isFs()) track("plein-ecran", true);
     try {
       if (isFs()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
       else { const p = (docEl.requestFullscreen || docEl.webkitRequestFullscreen).call(docEl); if (p && p.catch) p.catch(() => {}); }
@@ -865,6 +907,7 @@ Ma séance :
     } catch (e) { return false; }
   }
   async function reportBug(fromRide) {
+    track(fromRide ? "bug-pendant-seance" : "bug");
     if (fromRide) {
       bugFromRide = { elapsed: S.elapsed, idx: Math.min(blockAt(S.elapsed), plan.blocks.length - 1) };
       setRunning(false); // la séance attend en pause pendant qu'on écrit le message
@@ -888,11 +931,16 @@ Ma séance :
       if (v.endsWith(sep + EXAMPLE) && v.trim() !== EXAMPLE) { el.seance.value = v.slice(0, v.length - EXAMPLE.length).trim(); return; }
     }
   };
-  const onEdit = () => { clearTimeout(editTimer); editTimer = setTimeout(() => { stripExample(); S.elapsed = 0; refresh(); showResume(); store(); }, 250); };
+  const onEdit = () => { clearTimeout(editTimer); editTimer = setTimeout(() => {
+    stripExample(); S.elapsed = 0; refresh(); showResume(); store();
+    // Une fois par visite : la séance collée a-t-elle été lue ? (« 0 bloc » = le cas « ça marche pas »)
+    if (el.seance.value.trim()) track(plan.blocks.length ? "seance-lue" : "lecture-0-bloc", true);
+  }, 250); };
   el.seance.addEventListener("input", onEdit);
   el.seance.addEventListener("focus", () => { if (el.seance.value.trim() === EXAMPLE) el.seance.select(); });
   el.ftp.addEventListener("input", () => { refresh(); store(); });
-  el.go.addEventListener("click", () => { if (S.elapsed >= plan.total) S.elapsed = 0; openRide(); });
+  el.go.addEventListener("click", () => { if (S.elapsed >= plan.total) S.elapsed = 0; track("seance-lancee"); openRide(); });
+  $("howto").addEventListener("click", () => track("video-tuto"));
   el.resume.addEventListener("click", openRide);
   $("back").addEventListener("click", closeRide);
   $("doneBack").addEventListener("click", () => { S.elapsed = 0; closeRide(); });
