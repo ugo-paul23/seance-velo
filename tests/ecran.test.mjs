@@ -421,3 +421,94 @@ test("copie impossible : donne quand même le compte Instagram et ouvre le DM", 
     assert.equal(await page.evaluate(() => window.__dm), "https://ig.me/m/ugo_paul23");
   } finally { await browser.close(); }
 });
+
+// ---------- Plein écran et mode app ----------
+for (const [w, h, min] of [[844, 280, 40], [844, 250, 25]]) {
+  test(`paysage avec les barres de Safari (${w}×${h}) : tout tient et le graphique reste lisible`, async () => {
+    const { browser, page } = await openApp({ device: "iPhone 13 landscape", fakeClock: true });
+    try {
+      await page.setViewportSize({ width: w, height: h });
+      await paste(page, LONG, { fake: true });
+      await page.click("#go");
+      await page.clock.runFor(300);
+      const r = await page.evaluate(() => {
+        const b = s => document.querySelector(s).getBoundingClientRect();
+        const pb = b(".prof-box"), g = b(".global");
+        const out = ["watts", "cd", "play", "nextb", "prev", "back", "bugRide", "reset"].filter(id => {
+          const x = document.getElementById(id).getBoundingClientRect();
+          return x.bottom > innerHeight + 1 || x.right > innerWidth + 1 || x.width === 0;
+        });
+        return { out, vis: Math.round(Math.min(pb.bottom, g.bottom) - Math.max(pb.top, g.top)) };
+      });
+      assert.deepEqual(r.out, [], "éléments hors écran");
+      assert.ok(r.vis >= min, `graphique trop écrasé (${r.vis}px)`);
+    } finally { await browser.close(); }
+  });
+}
+
+test("bouton plein écran : présent quand le navigateur le permet, et « Retour » en sort", async () => {
+  const { browser, page } = await openApp({ device: "Pixel 7", fakeClock: true });
+  try {
+    await paste(page, SHORT, { fake: true });
+    await page.click("#go");
+    const enabled = await page.evaluate(() => document.fullscreenEnabled);
+    assert.equal(await page.isVisible("#fs"), enabled);
+    if (!enabled) return;
+    await page.click("#fs");
+    await page.waitForFunction(() => !!document.fullscreenElement, null, { timeout: 3000 });
+    await page.click("#back");
+    await page.waitForFunction(() => !document.fullscreenElement, null, { timeout: 3000 });
+    assert.equal(await page.isVisible("#setup"), true);
+  } finally { await browser.close(); }
+});
+
+test("sans API plein écran (iPhone) : pas de bouton, mais l'aide « écran d'accueil »", async () => {
+  const { chromium, devices } = await import("playwright");
+  const browser = await chromium.launch();
+  try {
+    for (const [ua, re] of [[devices["iPhone 13"].userAgent, /Partager → «\u00a0Sur l'écran d'accueil\u00a0»/], [devices["iPhone 13"].userAgent + " Instagram 300.0", /ouvre cette page dans Safari/]]) {
+      const context = await browser.newContext({ ...devices["iPhone 13"], userAgent: ua });
+      await context.addInitScript(() => {
+        Object.defineProperty(Document.prototype, "fullscreenEnabled", { get: () => false });
+        Object.defineProperty(Document.prototype, "webkitFullscreenEnabled", { get: () => false });
+      });
+      const page = await context.newPage();
+      await page.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+      await page.goto(PAGE_URL);
+      assert.equal(await page.isVisible("#iosHint"), true);
+      assert.match(await page.textContent("#iosHint"), re);
+      assert.equal(await page.isVisible("#howto"), true, "lien vers la vidéo tuto");
+      assert.equal(await page.getAttribute("#howto", "href"), "https://www.instagram.com/reel/Df137wnO7Ij/");
+      await page.fill("#seance", "10sec @ 200W");
+      await page.waitForTimeout(400);
+      await page.click("#go");
+      assert.equal(await page.isVisible("#fs"), false);
+      await context.close();
+    }
+  } finally { await browser.close(); }
+});
+
+test("pas d'aide iPhone ni vidéo tuto sur Android", async () => {
+  const { browser, page } = await openApp({ device: "Pixel 7" });
+  try {
+    assert.equal(await page.isVisible("#iosHint"), false);
+    assert.equal(await page.isVisible("#howto"), false);
+  } finally { await browser.close(); }
+});
+
+test("manifeste et icônes pour l'écran d'accueil", async () => {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+  const m = JSON.parse(fs.readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
+  assert.ok(["fullscreen", "standalone"].includes(m.display));
+  const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  assert.match(html, /rel="manifest" href="manifest.webmanifest"/);
+  assert.match(html, /rel="apple-touch-icon" href="apple-touch-icon.png"/);
+  const size = f => { const b = fs.readFileSync(path.join(root, f)); return [b.readUInt32BE(16), b.readUInt32BE(20)]; };
+  for (const ic of m.icons) {
+    const [w, h] = size(ic.src);
+    assert.equal(`${w}x${h}`, ic.sizes, ic.src);
+  }
+  assert.deepEqual(size("apple-touch-icon.png"), [180, 180]);
+});
